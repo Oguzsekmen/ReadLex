@@ -2,32 +2,40 @@ import { Book, User, VocabularyWord, BookStatus, UserBookProgress, CEFRLevel } f
 import { MOCK_BOOKS } from './data';
 
 // Storage Keys
-const USERS_KEY = 'lexiflow_users';
-const BOOKS_KEY = 'lexiflow_books';
-const VOCAB_KEY = 'lexiflow_vocab_'; // Prefix for user-specific vocab
-const PROGRESS_KEY = 'lexiflow_progress_'; // Prefix for user-specific progress
+const USERS_KEY = 'readlex_users';
+const BOOKS_KEY = 'readlex_books';
+const VOCAB_KEY = 'readlex_vocab_'; 
+const PROGRESS_KEY = 'readlex_progress_'; 
+
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 // Initial Admin User
 const ADMIN_USER: User = {
   id: 'admin-1',
-  email: 'admin@lexiflow.app',
-  name: 'Admin User',
-  password: 'admin123', // In real app, hash this
+  email: 'admin@readlex.com',
+  name: 'Super Admin',
+  password: 'admin', 
   role: 'ADMIN',
   languagePreference: 'TR',
-  streak: 99,
-  xp: 9999
+  streak: 999,
+  xp: 99999,
+  subscriptionStatus: 'ACTIVE',
+  plan: 'YEARLY',
+  trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
 };
 
 const DEFAULT_USER: User = {
   id: 'user-1',
-  email: 'demo@lexiflow.app',
-  name: 'Demo User',
-  password: 'password',
+  email: 'demo@readlex.com',
+  name: 'New Explorer',
+  password: 'demo',
   role: 'USER',
   languagePreference: 'TR',
-  streak: 5,
-  xp: 150
+  streak: 3,
+  xp: 150,
+  subscriptionStatus: 'TRIAL',
+  plan: 'FREE',
+  trialEndsAt: Date.now() + THREE_DAYS_MS // 3 Days from now
 };
 
 // --- Helper Functions ---
@@ -44,13 +52,11 @@ const saveToStorage = (key: string, value: any) => {
 // --- Initialization ---
 
 export const initStorage = () => {
-  // Initialize Books if empty
   const storedBooks = localStorage.getItem(BOOKS_KEY);
   if (!storedBooks) {
     saveToStorage(BOOKS_KEY, MOCK_BOOKS);
   }
 
-  // Initialize Users if empty
   const storedUsers = localStorage.getItem(USERS_KEY);
   if (!storedUsers) {
     saveToStorage(USERS_KEY, [ADMIN_USER, DEFAULT_USER]);
@@ -68,9 +74,9 @@ export const saveUser = (user: User) => {
   const index = users.findIndex(u => u.id === user.id);
   
   if (index >= 0) {
-    users[index] = user; // Update
+    users[index] = user; 
   } else {
-    users.push(user); // Insert
+    users.push(user); 
   }
   
   saveToStorage(USERS_KEY, users);
@@ -98,7 +104,7 @@ export const saveBook = (book: Book) => {
   if (index >= 0) {
     books[index] = book;
   } else {
-    books.unshift(book); // Add to top
+    books.unshift(book);
   }
   
   saveToStorage(BOOKS_KEY, books);

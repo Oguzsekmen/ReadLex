@@ -3,6 +3,8 @@
 export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 export type BookStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 export type UserRole = 'USER' | 'ADMIN';
+export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED';
+export type PlanType = 'FREE' | 'MONTHLY' | 'YEARLY';
 
 export interface User {
   id: string;
@@ -13,6 +15,12 @@ export interface User {
   role: UserRole;
   streak: number;
   xp: number;
+  
+  // Subscription
+  subscriptionStatus: SubscriptionStatus;
+  plan: PlanType;
+  trialEndsAt: number; // Timestamp
+  subscriptionEndsAt?: number; // Timestamp
 }
 
 export interface Book {

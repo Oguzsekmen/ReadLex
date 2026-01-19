@@ -8,6 +8,9 @@ export const MOCK_USER: User = {
   role: 'USER',
   streak: 12,
   xp: 450,
+  subscriptionStatus: 'ACTIVE',
+  plan: 'MONTHLY',
+  trialEndsAt: Date.now() + 30 * 24 * 60 * 60 * 1000
 };
 
 export const MOCK_BOOKS: Book[] = [

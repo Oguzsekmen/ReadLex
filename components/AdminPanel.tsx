@@ -90,7 +90,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       role: (targetUser.role as any) || 'USER',
       languagePreference: targetUser.languagePreference || 'TR',
       streak: targetUser.streak || 0,
-      xp: targetUser.xp || 0
+      xp: targetUser.xp || 0,
+      subscriptionStatus: targetUser.subscriptionStatus || 'TRIAL',
+      plan: targetUser.plan || 'FREE',
+      trialEndsAt: targetUser.trialEndsAt || (Date.now() + 3 * 24 * 60 * 60 * 1000)
     };
 
     saveUser(userToSave);
