@@ -45,34 +45,28 @@ export const getWordDefinition = async (word: string, contextSentence: string): 
   // 2. Try API (Best Quality)
   if (API_KEY) {
     try {
-      const prompt = `
-        Analyze the English word "${word}" in the context of this sentence: "${contextSentence}".
-        Provide a JSON response with:
-        1. Turkish translation (most appropriate for context).
-        2. English definition (simple, CEFR appropriate).
-        3. Part of speech.
-        4. Example sentence (different from context).
-        
-        Schema:
-        {
-          "word": "${word}",
-          "phonetic": "/.../",
-          "meanings": [
-            {
-              "partOfSpeech": "...",
-              "translation": "...",
-              "definition": "...",
-              "example": "..."
-            }
-          ]
-        }
-      `;
+      // Optimized prompt for speed: minimized tokens
+      const prompt = `Define "${word}" in context: "${contextSentence}".
+Return JSON.
+Schema:
+{
+  "word": "${word}",
+  "phonetic": "phonetic",
+  "meanings": [{
+    "partOfSpeech": "type",
+    "translation": "Turkish translation",
+    "definition": "Simple English definition",
+    "example": "Short example sentence"
+  }]
+}`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
         config: {
-          responseMimeType: 'application/json'
+          responseMimeType: 'application/json',
+          // Disable thinking budget to minimize latency for simple translation tasks
+          thinkingConfig: { thinkingBudget: 0 }
         }
       });
 
@@ -89,12 +83,9 @@ export const getWordDefinition = async (word: string, contextSentence: string): 
       console.warn("Gemini API failed, falling back to local dictionary:", error);
       // Fall through to local dictionary
     }
-  } else {
-    // Simulate slight network delay for realism if we are "simulating" an API, 
-    // but keep it fast (<150ms) as per user request for speed.
-    await new Promise(r => setTimeout(r, 150));
-  }
-
+  } 
+  // REMOVED: Artificial delay for non-API users to ensure maximum speed perception
+  
   // 3. Local Dictionary / Fallback (Reliable)
   const localDef = FALLBACK_DICT[normalizedWord];
   const fallbackResponse: DefinitionResponse = {

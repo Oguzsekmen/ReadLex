@@ -1,9 +1,10 @@
-import { Book, User, VocabularyWord, BookStatus, UserBookProgress, CEFRLevel } from '../types';
-import { MOCK_BOOKS } from './data';
+import { Book, User, VocabularyWord, BookStatus, UserBookProgress, CEFRLevel, PlanConfig } from '../types';
+import { MOCK_BOOKS, DEFAULT_PLANS } from './data';
 
 // Storage Keys
 const USERS_KEY = 'readlex_users';
 const BOOKS_KEY = 'readlex_books';
+const PLANS_KEY = 'readlex_plans';
 const VOCAB_KEY = 'readlex_vocab_'; 
 const PROGRESS_KEY = 'readlex_progress_'; 
 
@@ -12,16 +13,19 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 // Initial Admin User
 const ADMIN_USER: User = {
   id: 'admin-1',
-  email: 'admin@readlex.com',
-  name: 'Super Admin',
-  password: 'admin', 
+  email: 'Oguzsekmen@readlex.com',
+  name: 'Oguz Sekmen',
+  password: 'Oguzsekmen', 
   role: 'ADMIN',
   languagePreference: 'TR',
   streak: 999,
   xp: 99999,
+  dailyGoal: 25,
+  lastVisitDate: Date.now(),
   subscriptionStatus: 'ACTIVE',
   plan: 'YEARLY',
-  trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
+  trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+  subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
 };
 
 const DEFAULT_USER: User = {
@@ -33,9 +37,12 @@ const DEFAULT_USER: User = {
   languagePreference: 'TR',
   streak: 3,
   xp: 150,
-  subscriptionStatus: 'TRIAL',
-  plan: 'FREE',
-  trialEndsAt: Date.now() + THREE_DAYS_MS // 3 Days from now
+  dailyGoal: 25,
+  lastVisitDate: Date.now(),
+  subscriptionStatus: 'ACTIVE',
+  plan: 'TRAILER',
+  trialEndsAt: Date.now() + THREE_DAYS_MS,
+  subscriptionEndsAt: Date.now() + THREE_DAYS_MS
 };
 
 // --- Helper Functions ---
@@ -60,6 +67,11 @@ export const initStorage = () => {
   const storedUsers = localStorage.getItem(USERS_KEY);
   if (!storedUsers) {
     saveToStorage(USERS_KEY, [ADMIN_USER, DEFAULT_USER]);
+  }
+
+  const storedPlans = localStorage.getItem(PLANS_KEY);
+  if (!storedPlans) {
+    saveToStorage(PLANS_KEY, DEFAULT_PLANS);
   }
 };
 
@@ -113,6 +125,16 @@ export const saveBook = (book: Book) => {
 export const deleteBook = (bookId: string) => {
   const books = getBooks().filter(b => b.id !== bookId);
   saveToStorage(BOOKS_KEY, books);
+};
+
+// --- Plan Services (Admin) ---
+
+export const getPlans = (): PlanConfig[] => {
+  return getFromStorage<PlanConfig[]>(PLANS_KEY, DEFAULT_PLANS);
+};
+
+export const savePlans = (plans: PlanConfig[]) => {
+  saveToStorage(PLANS_KEY, plans);
 };
 
 // --- User Specific Data (Vocab & Progress) ---

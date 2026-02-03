@@ -47,6 +47,9 @@ const Layout: React.FC<LayoutProps> = ({
     );
   };
 
+  // Show upgrade if: Free, Trailer Plan, Trial Status, or Expired Status
+  const showUpgrade = currentUser.plan === 'FREE' || currentUser.plan === 'TRAILER' || currentUser.subscriptionStatus === 'TRIAL' || currentUser.subscriptionStatus === 'EXPIRED';
+
   return (
     <div className={`min-h-screen flex ${isDarkMode ? 'dark' : ''} bg-[#F0F4F8] dark:bg-gray-950 font-sans`}>
       {/* Mobile Sidebar Overlay */}
@@ -65,8 +68,9 @@ const Layout: React.FC<LayoutProps> = ({
         <div className="h-full flex flex-col p-4">
           <div className="p-4 flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
-              <div className="w-10 h-10 bg-gradient-to-tr from-brand-500 to-fun-pink rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/30 transform -rotate-6">
-                <BookOpen size={24} strokeWidth={3} />
+              <div className="w-10 h-10 bg-gradient-to-tr from-brand-500 to-fun-pink rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/30 transform -rotate-6 overflow-hidden">
+                {/* Logo or User Avatar */}
+                 <BookOpen size={24} strokeWidth={3} />
               </div>
               <span className="text-2xl font-black text-gray-800 dark:text-white tracking-tight">Read<span className="text-brand-600">Lex</span></span>
             </div>
@@ -76,18 +80,38 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
 
           <div className="px-2 mb-6">
-             {currentUser.subscriptionStatus === 'TRIAL' && (
+             {showUpgrade && (
                 <div className="bg-gradient-to-br from-orange-400 to-fun-pink p-4 rounded-2xl text-white shadow-lg relative overflow-hidden group cursor-pointer" onClick={() => onNavigate('pricing')}>
                    <div className="relative z-10">
                       <div className="flex justify-between items-start mb-2">
-                        <span className="font-bold text-xs bg-white/20 px-2 py-1 rounded-lg">FREE TRIAL</span>
+                        <span className="font-bold text-xs bg-white/20 px-2 py-1 rounded-lg">
+                           {currentUser.plan === 'FREE' ? (lang === 'TR' ? 'ÜCRETSİZ PLAN' : 'FREE PLAN') : (lang === 'TR' ? 'DENEME SÜRESİ' : 'FREE TRIAL')}
+                        </span>
                         <Crown size={20} className="fill-yellow-300 text-yellow-300 animate-pulse" />
                       </div>
-                      <p className="font-bold text-sm leading-tight">Upgrade to keep learning!</p>
+                      <p className="font-bold text-sm leading-tight">
+                         {lang === 'TR' ? 'Tüm özellikleri açmak için yükselt!' : 'Upgrade to unlock all features!'}
+                      </p>
                    </div>
                    <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500"></div>
                 </div>
              )}
+          </div>
+
+          <div className="px-5 mb-6 flex items-center gap-3">
+             <div className="w-12 h-12 rounded-full bg-gray-200 border-2 border-brand-200 dark:border-brand-900 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={() => onNavigate('profile')}>
+               {currentUser.avatarUrl ? (
+                 <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+               ) : (
+                 <div className="w-full h-full flex items-center justify-center bg-brand-500 text-white font-bold text-xl">
+                   {currentUser.name.charAt(0)}
+                 </div>
+               )}
+             </div>
+             <div className="flex-1 min-w-0">
+               <p className="font-bold text-gray-900 dark:text-white truncate">{currentUser.name}</p>
+               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Lvl {Math.floor(currentUser.xp / 100) + 1} Explorer</p>
+             </div>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -136,12 +160,16 @@ const Layout: React.FC<LayoutProps> = ({
       {/* Main Content */}
       <main className="flex-1 min-w-0 overflow-y-auto h-screen relative">
         <header className="lg:hidden bg-[#F8FAFC]/90 backdrop-blur-md dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">R</div>
-            <span className="font-extrabold text-gray-900 dark:text-white">ReadLex</span>
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
+            <div className="w-8 h-8 bg-gradient-to-tr from-brand-500 to-fun-pink rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3">
+              <BookOpen size={20} strokeWidth={3} />
+            </div>
+            <span className="font-black text-xl text-gray-900 dark:text-white">Read<span className="text-brand-600">Lex</span></span>
           </div>
-          <button onClick={() => setIsMobileMenuOpen(true)} className="text-gray-500 bg-white p-2 rounded-lg shadow-sm">
-            <Menu size={24} />
+          <button onClick={() => setIsMobileMenuOpen(true)} className="text-gray-500 bg-white dark:bg-gray-800 dark:text-gray-300 p-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} className="w-6 h-6 rounded-full object-cover" />
+            ) : <Menu size={24} />}
           </button>
         </header>
 
