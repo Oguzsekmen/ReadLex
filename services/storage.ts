@@ -337,8 +337,11 @@ const normalizeProgressData = (data: any): Record<string, UserBookProgress> => {
                 lastReadAt: new Date()
             };
         } else {
-            // Already an object
-            normalized[key] = data[key];
+            // Already an object, ensure all fields exist
+            normalized[key] = {
+                ...data[key],
+                lastWordIndex: data[key].lastWordIndex || 0
+            };
         }
     }
     return normalized;

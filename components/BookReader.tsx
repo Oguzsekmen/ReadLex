@@ -8,10 +8,12 @@ import { ArrowLeft, Loader2, Star, Volume2, X, CheckCircle, ZoomIn, ZoomOut, Typ
 interface BookReaderProps {
   book: Book;
   initialChapterIndex: number;
+  initialWordIndex?: number; // New Prop for auto-scroll
   onBack: () => void;
   onSaveWord: (word: VocabularyWord) => void;
   savedWords: VocabularyWord[];
   onCompleteChapter: (bookId: string, chapterIndex: number) => void;
+  onUpdateProgress: (bookId: string, chapterIndex: number, wordIndex: number) => void; // New callback
 }
 
 interface SelectionState {
@@ -27,8 +29,18 @@ const FONTS = [
   { name: 'Mono', class: 'font-mono' },
 ];
 
-const BookReader: React.FC<BookReaderProps> = ({ book, initialChapterIndex, onBack, onSaveWord, savedWords, onCompleteChapter }) => {
+const BookReader: React.FC<BookReaderProps> = ({ 
+  book, 
+  initialChapterIndex, 
+  initialWordIndex = 0,
+  onBack, 
+  onSaveWord, 
+  savedWords, 
+  onCompleteChapter,
+  onUpdateProgress
+}) => {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(initialChapterIndex);
+  const [lastReadWordIndex, setLastReadWordIndex] = useState(initialWordIndex);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [isLoadingDef, setIsLoadingDef] = useState(false);
   const [definition, setDefinition] = useState<any>(null);
@@ -56,8 +68,22 @@ const BookReader: React.FC<BookReaderProps> = ({ book, initialChapterIndex, onBa
   const isLastChapter = currentChapterIndex === chapters.length - 1;
 
   useEffect(() => {
-    // Scroll to top when chapter changes
-    window.scrollTo(0, 0);
+    // Reset word index when chapter changes, unless it's the initial load
+    if (currentChapterIndex !== initialChapterIndex) {
+       setLastReadWordIndex(0);
+       window.scrollTo(0, 0);
+    } else {
+       // Initial load auto-scroll
+       if (initialWordIndex > 0) {
+          setTimeout(() => {
+             const el = document.getElementById(`word-${initialWordIndex}`);
+             if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+             }
+          }, 500); // Small delay to ensure rendering
+       }
+    }
+
     if(currentChapter) {
         prefetchBookContent(currentChapter.content);
     }
@@ -67,8 +93,14 @@ const BookReader: React.FC<BookReaderProps> = ({ book, initialChapterIndex, onBa
     return text.match(/([\w’']+)|([^\w\s]+)|(\s+)/g) || [];
   };
 
-  const handleWordClick = async (word: string, event: React.MouseEvent) => {
+  const handleWordClick = async (word: string, globalIndex: number, event: React.MouseEvent) => {
     if (!/\w/.test(word)) return;
+
+    // Logic: Update last read word only if we are moving forward
+    if (globalIndex > lastReadWordIndex) {
+        setLastReadWordIndex(globalIndex);
+        onUpdateProgress(book.id, currentChapterIndex, globalIndex);
+    }
 
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     const x = Math.max(16, Math.min(rect.left + rect.width/2 - 160, window.innerWidth - 336)); 
@@ -140,6 +172,7 @@ const BookReader: React.FC<BookReaderProps> = ({ book, initialChapterIndex, onBa
   };
 
   const paragraphs = (currentChapter.content || '').split('\n').filter(p => p.trim() !== '');
+  let globalWordCounter = 0; // Global counter for the entire chapter
 
   return (
     <div className="relative min-h-screen bg-[#fdfdfd] dark:bg-gray-950 pb-24">
@@ -197,25 +230,37 @@ const BookReader: React.FC<BookReaderProps> = ({ book, initialChapterIndex, onBa
                 {tokenizeText(paragraph).map((token, index) => {
                   const isWord = /\w/.test(token);
                   const saved = isWord && isSaved(token);
-                  const active = selection?.word === token;
                   
-                  return isWord ? (
-                    <span
-                      key={index}
-                      onClick={(e) => handleWordClick(token, e)}
-                      className={`cursor-pointer transition-all rounded-md px-0.5 inline-block
-                        ${saved 
-                          ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-900 dark:text-yellow-100 decoration-yellow-400/50 underline decoration-2 underline-offset-4' 
-                          : 'hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:text-brand-600'
-                        }
-                        ${active ? 'bg-brand-600 text-white scale-110 shadow-lg px-2 rounded-lg' : ''}
-                      `}
-                    >
-                      {token}
-                    </span>
-                  ) : (
-                    <span key={index}>{token}</span>
-                  );
+                  let wordElement = null;
+                  
+                  if (isWord) {
+                     const myGlobalIndex = globalWordCounter++;
+                     const isLastRead = myGlobalIndex === lastReadWordIndex;
+                     const active = selection?.word === token;
+
+                     wordElement = (
+                        <span
+                          key={index}
+                          id={`word-${myGlobalIndex}`}
+                          onClick={(e) => handleWordClick(token, myGlobalIndex, e)}
+                          className={`cursor-pointer transition-all rounded-md px-0.5 inline-block
+                            ${saved 
+                              ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-900 dark:text-yellow-100 decoration-yellow-400/50 underline decoration-2 underline-offset-4' 
+                              : isLastRead 
+                                ? 'text-red-600 font-black decoration-red-200 underline decoration-2 underline-offset-4'
+                                : 'hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:text-brand-600'
+                            }
+                            ${active ? 'bg-brand-600 text-white scale-110 shadow-lg px-2 rounded-lg' : ''}
+                          `}
+                        >
+                          {token}
+                        </span>
+                     );
+                  } else {
+                     wordElement = <span key={index}>{token}</span>;
+                  }
+                  
+                  return wordElement;
                 })}
               </p>
             ))}

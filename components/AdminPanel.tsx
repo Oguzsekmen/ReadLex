@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus, Chapter } from '../types';
 import { getBooks, saveBook, deleteBook, getUsers, saveUser, deleteUser, getPlans, savePlans } from '../services/storage';
-import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight } from 'lucide-react';
+import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight, Clock } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface AdminPanelProps {
@@ -322,6 +322,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     u.email.toLowerCase().includes(userSearchTerm.toLowerCase())
   );
 
+  const calculateDaysLeft = (user: User) => {
+    if (user.plan === 'FREE' && user.subscriptionStatus !== 'TRIAL') return null;
+
+    const end = user.subscriptionStatus === 'TRIAL' ? user.trialEndsAt : (user.subscriptionEndsAt || 0);
+    const diff = end - Date.now();
+    
+    if (diff <= 0) return 0;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -625,31 +635,52 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
               <table className="w-full text-left">
                 <thead className="bg-gray-50 dark:bg-gray-900/50">
                    <tr>
-                     <th className="p-3">{t('email', lang)}</th>
-                     <th className="p-3">{t('displayName', lang)}</th>
+                     <th className="p-3 w-16">Avatar</th>
+                     <th className="p-3">User</th>
                      <th className="p-3">Plan</th>
                      <th className="p-3">Status</th>
+                     <th className="p-3">Time Left</th>
                      <th className="p-3">{t('actions', lang)}</th>
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {filteredUsers.map(u => (
-                    <tr key={u.id}>
-                      <td className="p-3 dark:text-white">{u.email}</td>
-                      <td className="p-3 font-bold dark:text-white">{u.name}</td>
-                      <td className="p-3"><span className="bg-brand-50 text-brand-600 px-2 py-1 rounded text-xs font-bold">{u.plan}</span></td>
-                       <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${u.subscriptionStatus === 'ACTIVE' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{u.subscriptionStatus}</span></td>
-                      <td className="p-3 flex gap-2">
-                        <button onClick={() => handleEditUser(u)} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit size={16} /></button>
-                        {u.role !== 'ADMIN' && (
-                           <button onClick={() => handleDeleteUser(u.id)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredUsers.map(u => {
+                    const daysLeft = calculateDaysLeft(u);
+                    
+                    return (
+                      <tr key={u.id}>
+                        <td className="p-3">
+                           <img src={u.avatarUrl} alt={u.name} className="w-10 h-10 rounded-full object-cover bg-gray-100" />
+                        </td>
+                        <td className="p-3">
+                           <div className="font-bold dark:text-white">{u.name}</div>
+                           <div className="text-xs text-gray-500">{u.email}</div>
+                        </td>
+                        <td className="p-3"><span className="bg-brand-50 text-brand-600 px-2 py-1 rounded text-xs font-bold">{u.plan}</span></td>
+                        <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${u.subscriptionStatus === 'ACTIVE' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{u.subscriptionStatus}</span></td>
+                        <td className="p-3">
+                            {daysLeft === null ? (
+                                <span className="text-gray-400 font-bold">-</span>
+                            ) : daysLeft > 0 ? (
+                                <span className="flex items-center text-xs font-bold text-gray-600 dark:text-gray-300">
+                                   <Clock size={12} className="mr-1" /> {daysLeft} Days
+                                </span>
+                            ) : (
+                                <span className="text-red-500 font-bold text-xs bg-red-50 px-2 py-1 rounded">Expired</span>
+                            )}
+                        </td>
+                        <td className="p-3 flex gap-2">
+                          <button onClick={() => handleEditUser(u)} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit size={16} /></button>
+                          {u.role !== 'ADMIN' && (
+                             <button onClick={() => handleDeleteUser(u.id)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {filteredUsers.length === 0 && (
                       <tr>
-                          <td colSpan={5} className="p-8 text-center text-gray-500 font-bold">
+                          <td colSpan={6} className="p-8 text-center text-gray-500 font-bold">
                              No users found matching "{userSearchTerm}"
                           </td>
                       </tr>

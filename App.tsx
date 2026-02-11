@@ -22,7 +22,7 @@ import {
 import { t } from './services/i18n';
 import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
-import ChapterList from './components/ChapterList'; // New Component
+import ChapterList from './components/ChapterList'; 
 import QuizEngine from './components/QuizEngine';
 import AdminPanel from './components/AdminPanel'; 
 import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
@@ -97,7 +97,7 @@ interface DashboardProps {
   onUpgradeClick: () => void;
   books: Book[];
   bookProgress: Record<string, UserBookProgress>;
-  onContinueBook: (book: Book) => void;
+  onContinueBook: (book: Book, autoJump?: boolean) => void;
   onNavigateToLibrary: () => void;
 }
 
@@ -116,15 +116,11 @@ const Dashboard = ({
   const isTrial = user.subscriptionStatus === 'TRIAL';
   const daysLeft = Math.ceil((user.trialEndsAt - Date.now()) / (1000 * 60 * 60 * 24));
 
-  // Use Dynamic Goal from User Object
   const dailyGoal = user.dailyGoal || 25; 
   const progressPercent = Math.min(100, (wordsAddedToday / dailyGoal) * 100);
 
-  // Find the most relevant book to show
-  // 1. Look for 'IN_PROGRESS' AND ensure the book is NOT archived
   const activeBook = books.find(b => !b.archived && bookProgress[b.id]?.status === 'IN_PROGRESS');
 
-  // --- Drag to Scroll Logic ---
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
@@ -149,7 +145,7 @@ const Dashboard = ({
     if (!isDragging || !scrollContainerRef.current) return;
     e.preventDefault();
     const x = e.pageX - scrollContainerRef.current.offsetLeft;
-    const walk = (x - startX) * 2; // Scroll-fastness
+    const walk = (x - startX) * 2; 
     scrollContainerRef.current.scrollLeft = scrollLeft - walk;
   };
 
@@ -176,7 +172,6 @@ const Dashboard = ({
              </p>
           </div>
           
-          {/* Stats Pills */}
           <div className="grid grid-cols-2 gap-3 w-full md:w-auto md:flex md:gap-4">
             <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-center sm:justify-start min-w-0 md:min-w-[140px] transform hover:scale-105 transition-transform">
               <div className="w-10 h-10 bg-orange-400 rounded-xl flex items-center justify-center mb-2 sm:mb-0 sm:mr-3 shadow-lg shrink-0">
@@ -225,7 +220,7 @@ const Dashboard = ({
               <h2 className="text-2xl font-black dark:text-white mb-1">{activeBook.title}</h2>
               <p className="text-gray-500 dark:text-gray-400 mb-6 font-medium">{activeBook.author}</p>
               <button 
-                onClick={() => onContinueBook(activeBook)}
+                onClick={() => onContinueBook(activeBook, true)}
                 className="inline-flex items-center px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-brand-500/20 group"
               >
                 {t('continueReading', lang)}
@@ -262,7 +257,7 @@ const Dashboard = ({
              {books.filter(b => !b.archived).map(book => (
                <div 
                   key={book.id} 
-                  onClick={() => onContinueBook(book)} 
+                  onClick={() => onContinueBook(book, false)} 
                   className="group min-w-[150px] w-[150px] md:min-w-[190px] md:w-[190px] flex-shrink-0 snap-center select-none cursor-pointer"
                >
                  <div className="relative rounded-2xl overflow-hidden shadow-lg shadow-gray-200 dark:shadow-none aspect-[2/3] mb-3 transform transition-transform duration-300 group-hover:-translate-y-1">
@@ -346,7 +341,6 @@ const App = () => {
   // Dynamic Data
   const [books, setBooks] = useState<Book[]>([]);
   const [savedWords, setSavedWords] = useState<VocabularyWord[]>([]);
-  // CHANGED: State now holds UserBookProgress objects
   const [bookProgress, setBookProgress] = useState<Record<string, UserBookProgress>>({});
   const [plans, setPlans] = useState<PlanConfig[]>([]);
 
@@ -359,7 +353,6 @@ const App = () => {
         const loadedPlans = await getPlans();
         setPlans(loadedPlans);
 
-        // Restore Session
         const sessId = getSession();
         if (sessId) {
           const restoredUser = await getUserById(sessId);
@@ -382,11 +375,9 @@ const App = () => {
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
-  // Subscription Check & Auto Downgrade Logic
   useEffect(() => {
     if (user && user.subscriptionStatus === 'TRIAL') {
       if (Date.now() > user.trialEndsAt) {
-         // Trial Expired -> Downgrade to FREE instead of expiring
          const downgradedUser: User = { 
            ...user, 
            subscriptionStatus: 'ACTIVE', 
@@ -398,7 +389,6 @@ const App = () => {
          alert("Your trial period has ended. You have been downgraded to the Free plan.");
       }
     } else if (user && user.subscriptionStatus === 'ACTIVE' && user.plan !== 'FREE' && user.subscriptionEndsAt) {
-       // Paid Plan Expired -> Downgrade
        if (Date.now() > user.subscriptionEndsAt) {
          const downgradedUser: User = { 
            ...user, 
@@ -413,7 +403,6 @@ const App = () => {
     }
   }, [user]);
 
-  // Load User Data
   useEffect(() => {
     if (user) {
       const loadUserData = async () => {
@@ -424,73 +413,11 @@ const App = () => {
         ]);
         setBooks(loadedBooks);
         setSavedWords(loadedVocab);
-        // Note: getUserProgress returns { [bookId]: UserBookProgress }
         setBookProgress(loadedProgress);
       };
       loadUserData();
     }
   }, [user, currentPage]); 
-
-  // --- ADAPTIVE GOAL LOGIC ---
-  useEffect(() => {
-    if (!user) return;
-
-    const checkGoals = async () => {
-        // Check if we need to update goal based on YESTERDAY's performance
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        const todayTs = today.getTime();
-
-        const lastVisit = new Date(user.lastVisitDate || 0);
-        lastVisit.setHours(0,0,0,0);
-        const lastVisitTs = lastVisit.getTime();
-
-        if (lastVisitTs >= todayTs) return;
-
-        // It's a new day. Let's look at YESTERDAY.
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayTs = yesterday.getTime();
-
-        let newGoal = user.dailyGoal || 25;
-        let newStreak = user.streak;
-
-        if (lastVisitTs === yesterdayTs) {
-            const yesterdayEnd = todayTs;
-            const wordsYesterday = savedWords.filter(w => {
-            const t = parseInt(w.id);
-            return t >= yesterdayTs && t < yesterdayEnd;
-            }).length;
-
-            const goalTarget = user.dailyGoal || 25;
-
-            if (wordsYesterday >= goalTarget) {
-                newGoal += 5;
-            } else {
-                newGoal = Math.max(25, newGoal - 5);
-                newStreak = 0;
-            }
-        } else {
-            newStreak = 0;
-            newGoal = Math.max(25, newGoal - 5);
-        }
-
-        const updatedUser = {
-            ...user,
-            dailyGoal: newGoal,
-            streak: newStreak,
-            lastVisitDate: Date.now() 
-        };
-
-        handleUpdateUser(updatedUser);
-    }
-    
-    // Only run this check if vocab has been loaded at least once
-    if (savedWords.length > 0 || user.lastVisitDate === 0) {
-        checkGoals();
-    }
-    
-  }, [user?.id, savedWords.length]); 
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
@@ -527,7 +454,6 @@ const App = () => {
     setSavedWords(newWords);
     saveUserVocab(user.id, newWords);
 
-    // Real-time Streak Increment
     const wordsToday = getDailyWordCountInternal(newWords); 
     const currentGoal = user.dailyGoal || 25;
     
@@ -548,22 +474,40 @@ const App = () => {
     saveUserVocab(user.id, newWords);
   };
 
-  const handleSelectBook = (book: Book) => {
+  // UPDATED: Added autoJump to handle resuming reading automatically
+  const handleSelectBook = (book: Book, autoJump: boolean = false) => {
     if (!user) return;
     setSelectedBook(book);
-    setActiveChapterIndex(null); // Reset chapter selection to show list
     
-    // Initialize progress if not started
-    if (!bookProgress[book.id]) {
+    const progress = bookProgress[book.id];
+    
+    // Auto-initialization if not exists
+    if (!progress) {
       const newEntry: UserBookProgress = {
           bookId: book.id,
           status: 'IN_PROGRESS',
           currentChapterIndex: 0,
+          lastWordIndex: 0, // Initialize new field
           lastReadAt: new Date()
       };
       const newProgress = { ...bookProgress, [book.id]: newEntry };
       setBookProgress(newProgress);
       saveUserProgress(user.id, newProgress);
+      
+      if (autoJump) {
+         setActiveChapterIndex(0);
+      } else {
+         setActiveChapterIndex(null);
+      }
+    } else {
+       if (autoJump) {
+          // If autoJump is true, jump to currentChapterIndex
+          const chapters = book.chapters || [];
+          const idx = progress.currentChapterIndex < chapters.length ? progress.currentChapterIndex : 0;
+          setActiveChapterIndex(idx);
+       } else {
+          setActiveChapterIndex(null);
+       }
     }
   };
 
@@ -574,24 +518,20 @@ const App = () => {
   const handleCompleteChapter = (bookId: string, chapterIndex: number) => {
     if (!user || !selectedBook) return;
     
-    // Retrieve current progress or initialize default
     const currentProgress = bookProgress[bookId] || { 
         bookId, 
         status: 'IN_PROGRESS', 
         currentChapterIndex: 0, 
+        lastWordIndex: 0,
         lastReadAt: new Date() 
     };
 
-    // If user finished chapterIndex, the NEXT chapter (chapterIndex + 1) should be unlocked.
-    // So currentChapterIndex should become chapterIndex + 1.
-    // We use Math.max to prevent regression if they re-read an old chapter.
     const nextChapterIndex = chapterIndex + 1;
     const newMaxIndex = Math.max(currentProgress.currentChapterIndex, nextChapterIndex);
 
     const chapters = selectedBook.chapters || [];
     let newStatus = currentProgress.status;
     
-    // If we just finished the last chapter (index length-1), mark completed.
     if (chapters.length > 0 && chapterIndex >= chapters.length - 1) {
         newStatus = 'COMPLETED';
     }
@@ -600,11 +540,35 @@ const App = () => {
         ...currentProgress,
         status: newStatus,
         currentChapterIndex: newMaxIndex,
+        // Reset word index for next chapter if we moved
+        lastWordIndex: nextChapterIndex > currentProgress.currentChapterIndex ? 0 : currentProgress.lastWordIndex,
         lastReadAt: new Date()
     };
 
     const newProgressMap = { ...bookProgress, [bookId]: newProgressEntry };
     setBookProgress(newProgressMap);
+    saveUserProgress(user.id, newProgressMap);
+  };
+
+  // NEW: Handle granular word progress updates
+  const handleUpdateWordProgress = (bookId: string, chapterIndex: number, wordIndex: number) => {
+    if (!user) return;
+    const currentProgress = bookProgress[bookId];
+    if (!currentProgress) return;
+
+    // Only update if it's the current chapter or a later one (safety check)
+    if (chapterIndex < currentProgress.currentChapterIndex) return;
+
+    const newProgressEntry: UserBookProgress = {
+      ...currentProgress,
+      currentChapterIndex: chapterIndex,
+      lastWordIndex: wordIndex,
+      lastReadAt: new Date()
+    };
+
+    const newProgressMap = { ...bookProgress, [bookId]: newProgressEntry };
+    setBookProgress(newProgressMap);
+    // Persist to storage
     saveUserProgress(user.id, newProgressMap);
   };
 
@@ -642,7 +606,6 @@ const App = () => {
     alert("Payment Successful! Welcome to ReadLex PRO.");
   };
 
-  // Helper for internal use with passed list
   const getDailyWordCountInternal = (currentWords: VocabularyWord[]) => {
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -675,7 +638,6 @@ const App = () => {
     );
   }
 
-  // Render Logic
   const renderContent = () => {
     if (isQuizActive) {
       return (
@@ -701,17 +663,24 @@ const App = () => {
                 <BookReader 
                   book={selectedBook} 
                   initialChapterIndex={activeChapterIndex}
+                  // Pass the saved word index if it exists for this chapter
+                  initialWordIndex={
+                    (bookProgress[selectedBook.id] && bookProgress[selectedBook.id].currentChapterIndex === activeChapterIndex)
+                      ? (bookProgress[selectedBook.id].lastWordIndex || 0) 
+                      : 0
+                  }
                   onBack={() => setActiveChapterIndex(null)} 
                   onSaveWord={handleSaveWord}
                   savedWords={savedWords}
                   onCompleteChapter={handleCompleteChapter}
+                  onUpdateProgress={handleUpdateWordProgress}
                 />
             );
         } else {
             return (
                 <ChapterList 
                   book={selectedBook} 
-                  progress={bookProgress[selectedBook.id]} // Directly pass the object
+                  progress={bookProgress[selectedBook.id]} 
                   onSelectChapter={handleSelectChapter}
                   onBack={() => setSelectedBook(null)}
                 />

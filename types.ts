@@ -51,7 +51,8 @@ export interface Book {
 export interface UserBookProgress {
   bookId: string;
   status: BookStatus;
-  currentChapterIndex: number; // New: Track which chapter user is on
+  currentChapterIndex: number; // Track which chapter user is on
+  lastWordIndex?: number; // New: Track specific word position in the chapter
   lastReadAt: Date;
 }
 

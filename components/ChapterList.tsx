@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Book, UserBookProgress } from '../types';
-import { PlayCircle, CheckCircle, Lock, ArrowLeft, BookOpen } from 'lucide-react';
+import { PlayCircle, CheckCircle, Lock, ArrowLeft, BookOpen, Play } from 'lucide-react';
 
 interface ChapterListProps {
   book: Book;
@@ -11,13 +11,14 @@ interface ChapterListProps {
 }
 
 const ChapterList: React.FC<ChapterListProps> = ({ book, progress, onSelectChapter, onBack }) => {
-  // Ensure chapters exists (legacy data protection)
   const chapters = book.chapters || [];
 
-  // Calculate completion percentage based on chapters
   const completedChapters = progress?.currentChapterIndex || 0;
   const totalChapters = chapters.length;
   const percentage = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
+
+  // Find the index to "Continue"
+  const continueIndex = Math.min(completedChapters, totalChapters - 1);
 
   return (
     <div className="min-h-screen bg-[#F0F4F8] dark:bg-gray-950 pb-20">
@@ -43,8 +44,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ book, progress, onSelectChapt
                 {book.level}
              </span>
              <h1 className="text-3xl md:text-5xl font-black text-gray-900 dark:text-white mb-2 leading-tight">{book.title}</h1>
-             <p className="text-gray-600 dark:text-gray-300 font-bold text-lg">{book.author}</p>
-             <div className="flex items-center mt-4 text-sm font-medium text-gray-500 dark:text-gray-400">
+             <div className="flex items-center text-sm font-medium text-gray-500 dark:text-gray-400">
                 <BookOpen size={16} className="mr-2" /> {totalChapters} Chapters
                 <span className="mx-3">•</span>
                 {book.totalWords} Words
@@ -54,28 +54,37 @@ const ChapterList: React.FC<ChapterListProps> = ({ book, progress, onSelectChapt
       </div>
 
       <div className="max-w-4xl mx-auto px-6 mt-8">
-        {/* Progress Bar if started */}
-        {progress && progress.status !== 'NOT_STARTED' && totalChapters > 0 && (
-           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 mb-8">
-              <div className="flex justify-between items-center mb-2">
-                 <span className="font-bold dark:text-white">Your Progress</span>
-                 <span className="font-black text-brand-600">{percentage}%</span>
+        <div className="flex flex-col md:flex-row gap-6 mb-8">
+           {/* Progress Panel */}
+           {progress && progress.status !== 'NOT_STARTED' && totalChapters > 0 && (
+              <div className="flex-1 bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700">
+                 <div className="flex justify-between items-center mb-2">
+                    <span className="font-bold dark:text-white">İlerlemen</span>
+                    <span className="font-black text-brand-600">{percentage}%</span>
+                 </div>
+                 <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                    <div className="bg-brand-600 h-full rounded-full transition-all duration-1000" style={{ width: `${percentage}%` }}></div>
+                 </div>
               </div>
-              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                 <div className="bg-brand-600 h-full rounded-full transition-all duration-1000" style={{ width: `${percentage}%` }}></div>
-              </div>
-           </div>
-        )}
+           )}
 
-        <h2 className="text-xl font-black text-gray-900 dark:text-white mb-6">Chapters</h2>
+           {/* Continue Button */}
+           {progress && progress.status === 'IN_PROGRESS' && totalChapters > 0 && (
+              <button 
+                onClick={() => onSelectChapter(continueIndex)}
+                className="bg-brand-600 text-white px-8 py-6 rounded-[2rem] font-black text-lg shadow-xl shadow-brand-500/20 hover:bg-brand-700 hover:scale-[1.02] transition-all flex items-center justify-center gap-3"
+              >
+                 <Play className="fill-current" /> Kaldığın Yerden Devam Et
+              </button>
+           )}
+        </div>
+
+        <h2 className="text-xl font-black text-gray-900 dark:text-white mb-6">Bölümler</h2>
 
         <div className="space-y-4">
            {chapters.map((chapter, index) => {
               const isCompleted = index < completedChapters;
               const isCurrent = index === completedChapters;
-              
-              // Simplification: Allow clicking any chapter if book is started, or enforce sequence?
-              // Let's enforce sequence for now, but allow re-reading previous.
               const canRead = index <= completedChapters || progress?.status === 'COMPLETED';
 
               return (
