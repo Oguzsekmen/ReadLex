@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus } from '../types';
 import { getBooks, saveBook, deleteBook, getUsers, saveUser, deleteUser, getPlans, savePlans } from '../services/storage';
-import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square } from 'lucide-react';
+import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2 } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface AdminPanelProps {
@@ -15,6 +15,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const [books, setBooks] = useState<Book[]>([]);
   const [users, setUsersList] = useState<User[]>([]);
   const [plans, setPlansList] = useState<PlanConfig[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Forms
   const [isEditingBook, setIsEditingBook] = useState(false);
@@ -31,10 +32,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     refreshData();
   }, []);
 
-  const refreshData = () => {
-    setBooks(getBooks());
-    setUsersList(getUsers());
-    setPlansList(getPlans());
+  const refreshData = async () => {
+    setIsLoading(true);
+    const [b, u, p] = await Promise.all([getBooks(), getUsers(), getPlans()]);
+    setBooks(b);
+    setUsersList(u);
+    setPlansList(p);
+    setIsLoading(false);
   };
 
   // --- Book Handlers ---
@@ -54,7 +58,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     }
   };
 
-  const handleSaveBook = () => {
+  const handleSaveBook = async () => {
     if (!currentBook.title || !currentBook.content) return alert(t('fillAllFields', currentUser.languagePreference));
 
     const bookToSave: Book = {
@@ -70,35 +74,33 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       archived: currentBook.archived || false
     };
 
-    saveBook(bookToSave);
+    await saveBook(bookToSave);
     setIsEditingBook(false);
     refreshData();
   };
 
-  const handleArchiveBook = (book: Book) => {
+  const handleArchiveBook = async (book: Book) => {
     const updatedBook = { ...book, archived: !book.archived };
-    saveBook(updatedBook);
+    await saveBook(updatedBook);
     refreshData();
   };
 
-  const handleDeleteBook = (id: string) => {
+  const handleDeleteBook = async (id: string) => {
     if (confirm(t('confirmDelete', currentUser.languagePreference))) {
-      deleteBook(id);
+      await deleteBook(id);
       refreshData();
     }
   };
 
   // --- User Handlers ---
   const handleEditUser = (u?: User) => {
-    // If editing existing user, we copy their password. 
-    // If Admin changes it in input, it updates.
     setTargetUser(u || {
       id: '', name: '', email: '', role: 'USER', password: '', plan: 'FREE', subscriptionStatus: 'ACTIVE'
     });
     setIsEditingUser(true);
   };
 
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (!targetUser.email || !targetUser.name) return alert(t('fillAllFields', currentUser.languagePreference));
     
     // Simple email check for new users
@@ -134,15 +136,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       subscriptionEndsAt: endAt
     };
 
-    saveUser(userToSave);
+    await saveUser(userToSave);
     setIsEditingUser(false);
     refreshData();
   };
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (id === currentUser.id) return alert("You cannot delete yourself.");
     if (confirm(t('confirmDelete', currentUser.languagePreference))) {
-      deleteUser(id);
+      await deleteUser(id);
       refreshData();
     }
   };
@@ -159,20 +161,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     setIsEditingPlan(true);
   };
 
-  const handleDeletePlan = (id: string) => {
+  const handleDeletePlan = async (id: string) => {
       if (confirm("Are you sure you want to delete this plan?")) {
           const updatedPlans = plans.filter(p => p.id !== id);
-          savePlans(updatedPlans);
+          await savePlans(updatedPlans);
           refreshData();
       }
   };
 
-  const handleSavePlan = () => {
+  const handleSavePlan = async () => {
     if (!targetPlan.name) return alert("Plan name is required");
     
     const featuresArray = planFeaturesText.split('\n').map(f => f.trim()).filter(f => f.length > 0);
     
-    // Auto-generate ID if new
     const planId = targetPlan.id || targetPlan.name?.toUpperCase().replace(/\s+/g, '_') || 'NEW_PLAN';
 
     const newPlanConfig: PlanConfig = {
@@ -183,6 +184,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
         features: featuresArray
     };
 
+    // Since Firebase update logic for plans is bulk in current storage.ts implementation for simplicity
+    // We update the local array then save all
     let updatedPlans = [...plans];
     const index = updatedPlans.findIndex(p => p.id === planId);
     
@@ -192,7 +195,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
         updatedPlans.push(newPlanConfig);
     }
 
-    savePlans(updatedPlans);
+    await savePlans(updatedPlans);
     setIsEditingPlan(false);
     refreshData();
   };
@@ -202,7 +205,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold dark:text-white">{t('adminPanel', lang)}</h1>
+        <h1 className="text-3xl font-bold dark:text-white flex items-center">
+            {t('adminPanel', lang)}
+            {isLoading && <Loader2 className="ml-3 animate-spin text-brand-500" />}
+        </h1>
       </div>
 
       <div className="flex space-x-4 mb-6">
@@ -238,12 +244,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
 
           {isEditingBook ? (
             <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-2xl animate-in slide-in-from-top-4">
+               {/* Same Form as before, logic handled by handleSaveBook async */}
                <h3 className="font-bold text-lg mb-4 dark:text-white">{currentBook.id ? t('edit', lang) : t('addBook', lang)}</h3>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div>
                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('title', lang)}</label>
                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.title || ''} onChange={e => setCurrentBook({...currentBook, title: e.target.value})} />
                  </div>
+                 {/* ... Rest of fields truncated for brevity as they are just UI inputs ... */}
                  <div>
                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('author', lang)}</label>
                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.author || ''} onChange={e => setCurrentBook({...currentBook, author: e.target.value})} />
@@ -259,9 +267,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.coverUrl || ''} onChange={e => setCurrentBook({...currentBook, coverUrl: e.target.value})} />
                  </div>
                  
-                 {/* Access Control - Checkboxes (Dynamic) */}
                  <div className="col-span-full">
-                   <label className="block text-sm font-bold text-gray-500 mb-2">Required Plans (Select all that apply)</label>
+                   <label className="block text-sm font-bold text-gray-500 mb-2">Required Plans</label>
                    <div className="flex gap-4 flex-wrap">
                       {plans.map((plan) => (
                         <button
@@ -362,7 +369,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
 
           {isEditingUser ? (
              <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-2xl animate-in slide-in-from-top-4">
-                {/* ... existing user form ... */}
                 <h3 className="font-bold text-lg mb-4 dark:text-white">{targetUser.id ? t('edit', lang) : t('addUser', lang)}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -385,7 +391,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                    </select>
                  </div>
                  
-                 {/* Admin User Management: Plan Assignment */}
                  <div className="col-span-full border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
                     <h4 className="font-bold text-brand-600 mb-3">Subscription Management</h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -449,7 +454,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       {/* --- PLANS TAB --- */}
       {activeTab === 'PLANS' && (
          <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
+            {/* Same as before but with async handlers */}
+             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold dark:text-white">Manage Subscription Plans</h2>
                 <button onClick={() => handleEditPlan()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center">
                    <Plus size={18} className="mr-2" /> Add Plan

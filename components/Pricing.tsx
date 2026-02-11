@@ -24,15 +24,18 @@ const Pricing: React.FC<PricingProps> = ({ user, onUpgrade }) => {
   const lang = user.languagePreference;
 
   useEffect(() => {
-    const allPlans = getPlans();
-    // Filter for paid plans only
-    const paidPlans = allPlans.filter(p => p.price > 0);
-    setPlans(paidPlans);
-    if (paidPlans.length > 0) {
-        // Try to select yearly first, or first avail
-        const yearly = paidPlans.find(p => p.durationDays >= 365);
-        setSelectedPlan(yearly ? yearly.id : paidPlans[0].id);
-    }
+    const loadPlans = async () => {
+      const allPlans = await getPlans();
+      // Filter for paid plans only
+      const paidPlans = allPlans.filter(p => p.price > 0);
+      setPlans(paidPlans);
+      if (paidPlans.length > 0) {
+          // Try to select yearly first, or first avail
+          const yearly = paidPlans.find(p => p.durationDays >= 365);
+          setSelectedPlan(yearly ? yearly.id : paidPlans[0].id);
+      }
+    };
+    loadPlans();
   }, []);
 
   const handlePayment = (e: React.FormEvent) => {

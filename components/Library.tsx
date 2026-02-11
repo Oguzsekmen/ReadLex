@@ -28,19 +28,23 @@ const Library: React.FC<LibraryProps> = ({
   }, [books, activeTab]);
 
   const canAccessBook = (bookPlans: PlanType[]): boolean => {
+    // 1. "FREE" planındaki kitaplar HERKESE açıktır.
+    // Kullanıcının planı ne olursa olsun (Expired, Trial, Monthly vb.) erişebilir.
+    if (bookPlans.includes('FREE')) return true;
+
     const isTrial = user.subscriptionStatus === 'TRIAL';
     const isExpired = user.subscriptionStatus === 'EXPIRED';
 
-    // 1. Trial allows everything
+    // 2. Trial allows everything
     if (isTrial) return true;
 
-    // 2. Expired users act like Free users (or restricted to Free content)
-    // If expired, check if 'FREE' is one of the allowed plans for the book.
+    // 3. Expired users act like Free users (or restricted to Free content)
+    // Yukarıdaki 1. kural zaten FREE kontrolünü yaptığı için buraya düşen expired kullanıcılar reddedilir.
     if (isExpired) {
-        return bookPlans.includes('FREE');
+        return false;
     }
 
-    // 3. Active users: Check if their plan is in the list
+    // 4. Active users: Check if their plan is in the list
     return bookPlans.includes(user.plan);
   };
 
@@ -118,7 +122,7 @@ const Library: React.FC<LibraryProps> = ({
                   {getStatusBadge(status)}
                 </div>
                 {/* Only show Premium badge if it's NOT a purely free book */}
-                {!(book.requiredPlan.length === 1 && book.requiredPlan[0] === 'FREE') && (
+                {!(book.requiredPlan.includes('FREE')) && (
                   <div className="absolute top-3 left-3">
                      <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded flex items-center shadow-lg">
                        <Sparkles size={10} className="mr-1" /> PREMIUM

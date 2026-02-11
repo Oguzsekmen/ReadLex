@@ -12,7 +12,10 @@
     "react-dom": "^19.2.3",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
-    "@google/genai": "^1.37.0"
+    "@google/genai": "^1.37.0",
+    "firebase": "^12.9.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

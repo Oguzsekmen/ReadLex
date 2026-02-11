@@ -1,156 +1,318 @@
-import { Book, User, VocabularyWord, BookStatus, UserBookProgress, CEFRLevel, PlanConfig } from '../types';
+import { Book, User, VocabularyWord, BookStatus, PlanConfig, DefinitionResponse } from '../types';
 import { MOCK_BOOKS, DEFAULT_PLANS } from './data';
+import { db } from './firebase';
 
-// Storage Keys
-const USERS_KEY = 'readlex_users';
-const BOOKS_KEY = 'readlex_books';
-const PLANS_KEY = 'readlex_plans';
-const VOCAB_KEY = 'readlex_vocab_'; 
-const PROGRESS_KEY = 'readlex_progress_'; 
+// Collection Names
+const USERS_COL = 'users';
+const BOOKS_COL = 'books';
+const PLANS_COL = 'plans';
+const VOCAB_COL = 'vocabulary';
+const PROGRESS_COL = 'progress';
+const DICT_CACHE_COL = 'dictionary_cache'; // Yeni: Global çeviri önbelleği
 
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-
-// Initial Admin User
-const ADMIN_USER: User = {
-  id: 'admin-1',
-  email: 'Oguzsekmen@readlex.com',
-  name: 'Oguz Sekmen',
-  password: 'Oguzsekmen', 
-  role: 'ADMIN',
-  languagePreference: 'TR',
-  streak: 999,
-  xp: 99999,
-  dailyGoal: 25,
-  lastVisitDate: Date.now(),
-  subscriptionStatus: 'ACTIVE',
-  plan: 'YEARLY',
-  trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-  subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
+// Local Storage Keys
+const LOCAL_KEYS = {
+  USERS: 'readlex_users',
+  BOOKS: 'readlex_books',
+  PLANS: 'readlex_plans',
+  VOCAB_PREFIX: 'readlex_vocab_',
+  PROGRESS_PREFIX: 'readlex_progress_',
+  GLOBAL_DICT: 'readlex_global_dict' // Yeni: Yerel çeviri önbelleği
 };
 
-const DEFAULT_USER: User = {
-  id: 'user-1',
-  email: 'demo@readlex.com',
-  name: 'New Explorer',
-  password: 'demo',
-  role: 'USER',
-  languagePreference: 'TR',
-  streak: 3,
-  xp: 150,
-  dailyGoal: 25,
-  lastVisitDate: Date.now(),
-  subscriptionStatus: 'ACTIVE',
-  plan: 'TRAILER',
-  trialEndsAt: Date.now() + THREE_DAYS_MS,
-  subscriptionEndsAt: Date.now() + THREE_DAYS_MS
+const SESSION_KEY = 'readlex_session_uid';
+
+const isFirebaseReady = () => !!db;
+
+async function withFallback<T>(
+    firebaseOp: () => Promise<T>,
+    localOp: () => T | Promise<T>
+): Promise<T> {
+    if (!isFirebaseReady()) {
+        return localOp();
+    }
+    try {
+        return await firebaseOp();
+    } catch (err: any) {
+        console.warn(`Firebase operation failed. Falling back to LocalStorage.`);
+        return localOp();
+    }
+}
+
+// --- Global Dictionary Cache Services ---
+
+export const getCachedDefinition = async (word: string): Promise<DefinitionResponse | null> => {
+    const normalized = word.toLowerCase().trim();
+    return withFallback(
+        async () => {
+            const doc = await db!.collection(DICT_CACHE_COL).doc(normalized).get();
+            return doc.exists ? (doc.data() as DefinitionResponse) : null;
+        },
+        () => {
+            const dictStr = localStorage.getItem(LOCAL_KEYS.GLOBAL_DICT);
+            const dict = dictStr ? JSON.parse(dictStr) : {};
+            return dict[normalized] || null;
+        }
+    );
 };
 
-// --- Helper Functions ---
-
-const getFromStorage = <T>(key: string, defaultValue: T): T => {
-  const stored = localStorage.getItem(key);
-  return stored ? JSON.parse(stored) : defaultValue;
+export const saveDefinitionToCache = async (word: string, definition: DefinitionResponse) => {
+    const normalized = word.toLowerCase().trim();
+    return withFallback(
+        async () => await db!.collection(DICT_CACHE_COL).doc(normalized).set(definition),
+        () => {
+            const dictStr = localStorage.getItem(LOCAL_KEYS.GLOBAL_DICT);
+            const dict = dictStr ? JSON.parse(dictStr) : {};
+            dict[normalized] = definition;
+            localStorage.setItem(LOCAL_KEYS.GLOBAL_DICT, JSON.stringify(dict));
+        }
+    );
 };
 
-const saveToStorage = (key: string, value: any) => {
-  localStorage.setItem(key, JSON.stringify(value));
+// --- Existing Storage Logic ---
+
+export const initStorage = async () => {
+  const adminUser: User = {
+    id: 'admin-oguz',
+    email: 'oguzsekmen@readlex.com',
+    name: 'Oguz Sekmen',
+    password: 'Oguzsekmen', 
+    avatarUrl: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Oguz',
+    languagePreference: 'TR',
+    role: 'ADMIN',
+    streak: 999,
+    xp: 99999,
+    dailyGoal: 50,
+    lastVisitDate: Date.now(),
+    subscriptionStatus: 'ACTIVE',
+    plan: 'YEARLY', 
+    trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+    subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
+  };
+
+  const seedLocal = () => {
+      if (!localStorage.getItem(LOCAL_KEYS.BOOKS)) {
+          localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(MOCK_BOOKS));
+      }
+      if (!localStorage.getItem(LOCAL_KEYS.PLANS)) {
+          localStorage.setItem(LOCAL_KEYS.PLANS, JSON.stringify(DEFAULT_PLANS));
+      }
+      const usersStr = localStorage.getItem(LOCAL_KEYS.USERS);
+      let localUsers: User[] = usersStr ? JSON.parse(usersStr) : [];
+      if (!localUsers.find(u => u.email.toLowerCase() === adminUser.email.toLowerCase())) {
+          localUsers.push(adminUser);
+          localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(localUsers));
+      }
+  };
+
+  await withFallback(
+      async () => {
+        const booksSnapshot = await db!.collection(BOOKS_COL).get();
+        if (booksSnapshot.empty) {
+            for (const book of MOCK_BOOKS) {
+                await db!.collection(BOOKS_COL).doc(book.id).set(book);
+            }
+        }
+        const plansSnapshot = await db!.collection(PLANS_COL).get();
+        if (plansSnapshot.empty) {
+            for (const plan of DEFAULT_PLANS) {
+                await db!.collection(PLANS_COL).doc(plan.id).set(plan);
+            }
+        }
+        const adminQuery = await db!.collection(USERS_COL).where('email', '==', adminUser.email).get();
+        if (adminQuery.empty) {
+            await db!.collection(USERS_COL).doc(adminUser.id).set(adminUser);
+        }
+      },
+      seedLocal
+  );
 };
 
-// --- Initialization ---
-
-export const initStorage = () => {
-  const storedBooks = localStorage.getItem(BOOKS_KEY);
-  if (!storedBooks) {
-    saveToStorage(BOOKS_KEY, MOCK_BOOKS);
-  }
-
-  const storedUsers = localStorage.getItem(USERS_KEY);
-  if (!storedUsers) {
-    saveToStorage(USERS_KEY, [ADMIN_USER, DEFAULT_USER]);
-  }
-
-  const storedPlans = localStorage.getItem(PLANS_KEY);
-  if (!storedPlans) {
-    saveToStorage(PLANS_KEY, DEFAULT_PLANS);
-  }
+export const getUsers = async (): Promise<User[]> => {
+  return withFallback(
+      async () => {
+          const snapshot = await db!.collection(USERS_COL).get();
+          return snapshot.docs.map(d => d.data() as User);
+      },
+      () => {
+          const usersStr = localStorage.getItem(LOCAL_KEYS.USERS);
+          return usersStr ? JSON.parse(usersStr) : [];
+      }
+  );
 };
 
-// --- User Services ---
-
-export const getUsers = (): User[] => {
-  return getFromStorage<User[]>(USERS_KEY, []);
+export const saveUser = async (user: User) => {
+  const normalizedUser = { ...user, email: user.email.toLowerCase().trim() };
+  return withFallback(
+      async () => await db!.collection(USERS_COL).doc(normalizedUser.id).set(normalizedUser),
+      async () => {
+          const users = await getUsers();
+          const index = users.findIndex(u => u.id === normalizedUser.id);
+          if (index >= 0) users[index] = normalizedUser;
+          else users.push(normalizedUser);
+          localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(users));
+      }
+  );
 };
 
-export const saveUser = (user: User) => {
-  const users = getUsers();
-  const index = users.findIndex(u => u.id === user.id);
-  
-  if (index >= 0) {
-    users[index] = user; 
-  } else {
-    users.push(user); 
-  }
-  
-  saveToStorage(USERS_KEY, users);
+export const deleteUser = async (userId: string) => {
+    return withFallback(
+        async () => await db!.collection(USERS_COL).doc(userId).delete(),
+        async () => {
+            const users = await getUsers();
+            const filtered = users.filter(u => u.id !== userId);
+            localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(filtered));
+        }
+    );
 };
 
-export const deleteUser = (userId: string) => {
-  const users = getUsers().filter(u => u.id !== userId);
-  saveToStorage(USERS_KEY, users);
+export const getUserByEmail = async (email: string): Promise<User | undefined> => {
+    const normalizedEmail = email.toLowerCase().trim();
+    return withFallback(
+        async () => {
+            const snapshot = await db!.collection(USERS_COL).where("email", "==", normalizedEmail).get();
+            if (snapshot.empty) return undefined;
+            return snapshot.docs[0].data() as User;
+        },
+        async () => {
+            const users = await getUsers();
+            return users.find(u => u.email.toLowerCase() === normalizedEmail);
+        }
+    );
 };
 
-export const getUserByEmail = (email: string): User | undefined => {
-  return getUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
+export const getUserById = async (id: string): Promise<User | undefined> => {
+    return withFallback(
+        async () => {
+            const docSnap = await db!.collection(USERS_COL).doc(id).get();
+            return docSnap.exists ? (docSnap.data() as User) : undefined;
+        },
+        async () => {
+            const users = await getUsers();
+            return users.find(u => u.id === id);
+        }
+    );
 };
 
-// --- Book Services ---
-
-export const getBooks = (): Book[] => {
-  return getFromStorage<Book[]>(BOOKS_KEY, []);
+export const saveSession = (userId: string) => {
+  localStorage.setItem(SESSION_KEY, userId);
 };
 
-export const saveBook = (book: Book) => {
-  const books = getBooks();
-  const index = books.findIndex(b => b.id === book.id);
-
-  if (index >= 0) {
-    books[index] = book;
-  } else {
-    books.unshift(book);
-  }
-  
-  saveToStorage(BOOKS_KEY, books);
+export const getSession = (): string | null => {
+  return localStorage.getItem(SESSION_KEY);
 };
 
-export const deleteBook = (bookId: string) => {
-  const books = getBooks().filter(b => b.id !== bookId);
-  saveToStorage(BOOKS_KEY, books);
+export const clearSession = () => {
+  localStorage.removeItem(SESSION_KEY);
 };
 
-// --- Plan Services (Admin) ---
-
-export const getPlans = (): PlanConfig[] => {
-  return getFromStorage<PlanConfig[]>(PLANS_KEY, DEFAULT_PLANS);
+export const getBooks = async (): Promise<Book[]> => {
+    return withFallback(
+        async () => {
+            const snapshot = await db!.collection(BOOKS_COL).get();
+            return snapshot.docs.map(d => d.data() as Book);
+        },
+        () => {
+            const booksStr = localStorage.getItem(LOCAL_KEYS.BOOKS);
+            return booksStr ? JSON.parse(booksStr) : MOCK_BOOKS;
+        }
+    );
 };
 
-export const savePlans = (plans: PlanConfig[]) => {
-  saveToStorage(PLANS_KEY, plans);
+export const saveBook = async (book: Book) => {
+    return withFallback(
+        async () => await db!.collection(BOOKS_COL).doc(book.id).set(book),
+        async () => {
+            const books = await getBooks();
+            const index = books.findIndex(b => b.id === book.id);
+            if (index >= 0) books[index] = book;
+            else books.push(book);
+            localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(books));
+        }
+    );
 };
 
-// --- User Specific Data (Vocab & Progress) ---
-
-export const getUserVocab = (userId: string): VocabularyWord[] => {
-  return getFromStorage<VocabularyWord[]>(VOCAB_KEY + userId, []);
+export const deleteBook = async (bookId: string) => {
+    return withFallback(
+        async () => await db!.collection(BOOKS_COL).doc(bookId).delete(),
+        async () => {
+            const books = await getBooks();
+            const filtered = books.filter(b => b.id !== bookId);
+            localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(filtered));
+        }
+    );
 };
 
-export const saveUserVocab = (userId: string, words: VocabularyWord[]) => {
-  saveToStorage(VOCAB_KEY + userId, words);
+export const getPlans = async (): Promise<PlanConfig[]> => {
+    return withFallback(
+        async () => {
+            const snapshot = await db!.collection(PLANS_COL).get();
+            const plans = snapshot.docs.map(d => d.data() as PlanConfig);
+            return plans.length > 0 ? plans : DEFAULT_PLANS;
+        },
+        () => {
+            const plansStr = localStorage.getItem(LOCAL_KEYS.PLANS);
+            return plansStr ? JSON.parse(plansStr) : DEFAULT_PLANS;
+        }
+    );
 };
 
-export const getUserProgress = (userId: string): Record<string, BookStatus> => {
-  return getFromStorage<Record<string, BookStatus>>(PROGRESS_KEY + userId, {});
+export const savePlans = async (plans: PlanConfig[]) => {
+    return withFallback(
+        async () => {
+            const batch = db!.batch();
+            for (const plan of plans) {
+                const ref = db!.collection(PLANS_COL).doc(plan.id);
+                batch.set(ref, plan);
+            }
+            await batch.commit();
+        },
+        () => {
+            localStorage.setItem(LOCAL_KEYS.PLANS, JSON.stringify(plans));
+        }
+    );
 };
 
-export const saveUserProgress = (userId: string, progress: Record<string, BookStatus>) => {
-  saveToStorage(PROGRESS_KEY + userId, progress);
+export const getUserVocab = async (userId: string): Promise<VocabularyWord[]> => {
+    return withFallback(
+        async () => {
+            const docSnap = await db!.collection(VOCAB_COL).doc(userId).get();
+            return docSnap.exists ? docSnap.data()?.words : [];
+        },
+        () => {
+            const vocabStr = localStorage.getItem(LOCAL_KEYS.VOCAB_PREFIX + userId);
+            return vocabStr ? JSON.parse(vocabStr) : [];
+        }
+    );
+};
+
+export const saveUserVocab = async (userId: string, words: VocabularyWord[]) => {
+    return withFallback(
+        async () => await db!.collection(VOCAB_COL).doc(userId).set({ words }),
+        async () => {
+            localStorage.setItem(LOCAL_KEYS.VOCAB_PREFIX + userId, JSON.stringify(words));
+        }
+    );
+};
+
+export const getUserProgress = async (userId: string): Promise<Record<string, BookStatus>> => {
+    return withFallback(
+        async () => {
+            const docSnap = await db!.collection(PROGRESS_COL).doc(userId).get();
+            return docSnap.exists ? docSnap.data()?.progress : {};
+        },
+        () => {
+            const progStr = localStorage.getItem(LOCAL_KEYS.PROGRESS_PREFIX + userId);
+            return progStr ? JSON.parse(progStr) : {};
+        }
+    );
+};
+
+export const saveUserProgress = async (userId: string, progress: Record<string, BookStatus>) => {
+    return withFallback(
+        async () => await db!.collection(PROGRESS_COL).doc(userId).set({ progress }),
+        async () => {
+            localStorage.setItem(LOCAL_KEYS.PROGRESS_PREFIX + userId, JSON.stringify(progress));
+        }
+    );
 };

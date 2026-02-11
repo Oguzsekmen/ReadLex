@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Profile from './components/Profile';
-import Pricing from './components/Pricing'; // New
+import Pricing from './components/Pricing';
 import { Book, User, VocabularyWord, QuizResult, BookStatus, PlanType, PlanConfig } from './types';
 import { 
   initStorage, 
@@ -12,13 +12,18 @@ import {
   getUserProgress, 
   saveUserProgress, 
   saveUser,
-  getPlans
+  getPlans,
+  saveSession,
+  getSession,
+  clearSession,
+  getUserById
 } from './services/storage';
 import { t } from './services/i18n';
+import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
 import QuizEngine from './components/QuizEngine';
 import AdminPanel from './components/AdminPanel'; 
-import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookOpen } from 'lucide-react';
+import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
 import Library from './components/Library';
 
 // --- Vocabulary Wrapper ---
@@ -60,7 +65,9 @@ const VocabularyWrapper = ({ user, words, onDelete }: { user: User, words: Vocab
                <tr key={word.id} className="hover:bg-brand-50 dark:hover:bg-gray-700/30 transition-colors group">
                  <td className="px-6 py-4 font-bold text-gray-900 dark:text-white text-lg">{word.word}</td>
                  <td className="px-6 py-4 text-gray-700 dark:text-gray-300 font-medium">{word.translation}</td>
-                 <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden md:table-cell font-medium">{word.type}</td>
+                 <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden md:table-cell font-medium">
+                   {translatePos(word.type)}
+                 </td>
                  <td className="px-6 py-4 text-gray-500 dark:text-gray-400 text-sm italic hidden lg:table-cell truncate max-w-xs">"{word.exampleSentence}"</td>
                  <td className="px-6 py-4 text-right">
                    <button onClick={() => onDelete(word.id)} className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all">
@@ -168,7 +175,7 @@ const Dashboard = ({
              </p>
           </div>
           
-          {/* Stats Pills - Grid on mobile for equal width, Flex on desktop */}
+          {/* Stats Pills */}
           <div className="grid grid-cols-2 gap-3 w-full md:w-auto md:flex md:gap-4">
             <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-center sm:justify-start min-w-0 md:min-w-[140px] transform hover:scale-105 transition-transform">
               <div className="w-10 h-10 bg-orange-400 rounded-xl flex items-center justify-center mb-2 sm:mb-0 sm:mr-3 shadow-lg shrink-0">
@@ -243,7 +250,6 @@ const Dashboard = ({
              </button>
           </div>
           
-          {/* Scrollable Book Container with Drag Support - FIXED: Removed negative margins (-mx) to stay inside white frame */}
           <div 
             ref={scrollContainerRef}
             onMouseDown={handleMouseDown}
@@ -252,7 +258,6 @@ const Dashboard = ({
             onMouseMove={handleMouseMove}
             className="flex gap-5 overflow-x-auto pb-4 cursor-grab active:cursor-grabbing scrollbar-hide snap-x"
           >
-             {/* Dynamic Book List: Showing all active books, click opens reader */}
              {books.filter(b => !b.archived).map(book => (
                <div 
                   key={book.id} 
@@ -331,6 +336,7 @@ const App = () => {
   const [activeBook, setActiveBook] = useState<Book | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Dynamic Data
   const [books, setBooks] = useState<Book[]>([]);
@@ -340,8 +346,29 @@ const App = () => {
 
   // Initialization
   useEffect(() => {
-    initStorage();
-    setPlans(getPlans());
+    const init = async () => {
+      try {
+        setIsLoading(true);
+        await initStorage();
+        const loadedPlans = await getPlans();
+        setPlans(loadedPlans);
+
+        // Restore Session
+        const sessId = getSession();
+        if (sessId) {
+          const restoredUser = await getUserById(sessId);
+          if (restoredUser) {
+            setUser(restoredUser);
+            setIsAuthenticated(true);
+          }
+        }
+      } catch (e) {
+        console.error("Initialization error:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    init();
   }, []);
 
   useEffect(() => {
@@ -383,9 +410,17 @@ const App = () => {
   // Load User Data
   useEffect(() => {
     if (user) {
-      setBooks(getBooks()); 
-      setSavedWords(getUserVocab(user.id));
-      setBookProgress(getUserProgress(user.id));
+      const loadUserData = async () => {
+        const [loadedBooks, loadedVocab, loadedProgress] = await Promise.all([
+            getBooks(),
+            getUserVocab(user.id),
+            getUserProgress(user.id)
+        ]);
+        setBooks(loadedBooks);
+        setSavedWords(loadedVocab);
+        setBookProgress(loadedProgress);
+      };
+      loadUserData();
     }
   }, [user, currentPage]); 
 
@@ -393,72 +428,67 @@ const App = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Check if we need to update goal based on YESTERDAY's performance
-    // We only do this check once per day (if lastVisitDate was yesterday or earlier)
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const todayTs = today.getTime();
+    const checkGoals = async () => {
+        // Check if we need to update goal based on YESTERDAY's performance
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const todayTs = today.getTime();
 
-    const lastVisit = new Date(user.lastVisitDate || 0);
-    lastVisit.setHours(0,0,0,0);
-    const lastVisitTs = lastVisit.getTime();
+        const lastVisit = new Date(user.lastVisitDate || 0);
+        lastVisit.setHours(0,0,0,0);
+        const lastVisitTs = lastVisit.getTime();
 
-    // If we have already visited today, do nothing.
-    if (lastVisitTs >= todayTs) return;
+        if (lastVisitTs >= todayTs) return;
 
-    // It's a new day. Let's look at YESTERDAY.
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayTs = yesterday.getTime();
+        // It's a new day. Let's look at YESTERDAY.
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayTs = yesterday.getTime();
 
-    // Was the user active yesterday?
-    let newGoal = user.dailyGoal || 25;
-    let newStreak = user.streak;
+        let newGoal = user.dailyGoal || 25;
+        let newStreak = user.streak;
 
-    if (lastVisitTs === yesterdayTs) {
-        // User was active yesterday. Did they meet the goal?
-        // Count words added yesterday
-        const yesterdayEnd = todayTs;
-        const wordsYesterday = savedWords.filter(w => {
-           const t = parseInt(w.id);
-           return t >= yesterdayTs && t < yesterdayEnd;
-        }).length;
+        if (lastVisitTs === yesterdayTs) {
+            const yesterdayEnd = todayTs;
+            const wordsYesterday = savedWords.filter(w => {
+            const t = parseInt(w.id);
+            return t >= yesterdayTs && t < yesterdayEnd;
+            }).length;
 
-        const goalTarget = user.dailyGoal || 25;
+            const goalTarget = user.dailyGoal || 25;
 
-        if (wordsYesterday >= goalTarget) {
-            // SUCCESS: Increase Goal
-            newGoal += 5;
-            // Streak likely updated in real-time yesterday, keep it.
+            if (wordsYesterday >= goalTarget) {
+                newGoal += 5;
+            } else {
+                newGoal = Math.max(25, newGoal - 5);
+                newStreak = 0;
+            }
         } else {
-            // FAILED: Decrease Goal (min 25) & Reset Streak
-            newGoal = Math.max(25, newGoal - 5);
             newStreak = 0;
+            newGoal = Math.max(25, newGoal - 5);
         }
-    } else {
-        // User skipped a day (or more).
-        // Streak Broken.
-        newStreak = 0;
-        // Decrease goal because habit was broken.
-        newGoal = Math.max(25, newGoal - 5);
+
+        const updatedUser = {
+            ...user,
+            dailyGoal: newGoal,
+            streak: newStreak,
+            lastVisitDate: Date.now() 
+        };
+
+        handleUpdateUser(updatedUser);
     }
-
-    // Update User
-    const updatedUser = {
-        ...user,
-        dailyGoal: newGoal,
-        streak: newStreak,
-        lastVisitDate: Date.now() // Mark today as visited
-    };
-
-    handleUpdateUser(updatedUser);
-
-  }, [user?.id, savedWords.length]); // Depend on ID and vocab count to trigger but logic inside guards against loop
+    
+    // Only run this check if vocab has been loaded at least once
+    if (savedWords.length > 0 || user.lastVisitDate === 0) {
+        checkGoals();
+    }
+    
+  }, [user?.id, savedWords.length]); 
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
     setIsAuthenticated(true);
-    // REMOVED forced expired check here to allow navigation
+    saveSession(loggedInUser.id);
   };
 
   const handleLogout = () => {
@@ -466,6 +496,7 @@ const App = () => {
     setUser(null);
     setActiveBook(null);
     setCurrentPage('dashboard');
+    clearSession();
   };
 
   const handleUpdateUser = (updatedUser: User) => {
@@ -489,17 +520,15 @@ const App = () => {
     saveUserVocab(user.id, newWords);
 
     // Real-time Streak Increment
-    const wordsToday = getDailyWordCountInternal(newWords); // Calculate using new list
+    const wordsToday = getDailyWordCountInternal(newWords); 
     const currentGoal = user.dailyGoal || 25;
     
-    // If we JUST hit the goal (exact match ensures only 1 update per day trigger)
     if (wordsToday === currentGoal) {
        const newStreak = user.streak + 1;
-       const newXp = user.xp + 50; // Bonus XP for hitting daily goal
+       const newXp = user.xp + 50; 
        handleUpdateUser({ ...user, streak: newStreak, xp: newXp });
        alert(`Daily Goal Reached! Streak increased to ${newStreak}! +50 XP`);
     } else {
-       // Standard XP for adding a word
        handleUpdateUser({ ...user, xp: user.xp + 5 });
     }
   };
@@ -551,7 +580,6 @@ const App = () => {
     const planConfig = plans.find(p => p.id === plan);
     const durationDays = planConfig ? planConfig.durationDays : (plan === 'YEARLY' ? 365 : 30);
 
-    // Upgrade Logic
     const updatedUser: User = {
       ...user,
       subscriptionStatus: 'ACTIVE',
@@ -575,9 +603,17 @@ const App = () => {
     }).length;
   }
 
-  // Calculate stats for UI
   const getDailyWordCount = () => {
     return getDailyWordCountInternal(savedWords);
+  }
+
+  if (isLoading) {
+      return (
+          <div className="h-screen w-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+             <Loader2 size={48} className="text-brand-600 animate-spin mb-4" />
+             <p className="text-gray-500 font-bold animate-pulse">Loading ReadLex...</p>
+          </div>
+      );
   }
 
   if (!isAuthenticated || !user) {
