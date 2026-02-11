@@ -1,3 +1,4 @@
+
 import { Book, User, VocabularyWord, PlanConfig } from '../types';
 
 export const MOCK_USER: User = {
@@ -59,9 +60,18 @@ export const MOCK_BOOKS: Book[] = [
     excerpt: 'Sarah looked for her key everywhere. It was not in her pocket.',
     requiredPlan: ['FREE', 'TRAILER', 'MONTHLY', 'YEARLY'],
     archived: false,
-    content: `Sarah looked for her key everywhere. It was not in her pocket. It was not on the table. "Where is it?" she asked. The sun was hot. She wanted to go inside her house.
-
-Suddenly, she saw something shiny in the grass. It was yellow. She walked to the grass. "Is this my key?" she thought. She picked it up. Yes! It was her key. She was very happy.`
+    chapters: [
+      {
+        id: 'c1',
+        title: 'The Morning Search',
+        content: `Sarah looked for her key everywhere. It was not in her pocket. It was not on the table. "Where is it?" she asked. The sun was hot. She wanted to go inside her house.`
+      },
+      {
+        id: 'c2',
+        title: 'Found in the Grass',
+        content: `Suddenly, she saw something shiny in the grass. It was yellow. She walked to the grass. "Is this my key?" she thought. She picked it up. Yes! It was her key. She was very happy.`
+      }
+    ]
   },
   {
     id: 'b2',
@@ -73,9 +83,18 @@ Suddenly, she saw something shiny in the grass. It was yellow. She walked to the
     excerpt: 'The rapid evolution of artificial intelligence has sparked both excitement and concern.',
     requiredPlan: ['TRAILER', 'MONTHLY', 'YEARLY'],
     archived: false,
-    content: `The rapid evolution of artificial intelligence has sparked both excitement and concern across the globe. Experts argue that while automation can increase efficiency, it also poses significant ethical dilemmas regarding privacy and employment.
-
-However, historical trends suggest that technology often creates more jobs than it destroys. The transition period is usually the most challenging. Societies must adapt their educational systems to prepare the workforce for a future where collaboration with machines is the norm.`
+    chapters: [
+      {
+        id: 'c1',
+        title: 'The Age of AI',
+        content: `The rapid evolution of artificial intelligence has sparked both excitement and concern across the globe. Experts argue that while automation can increase efficiency, it also poses significant ethical dilemmas regarding privacy and employment.`
+      },
+      {
+        id: 'c2',
+        title: 'Historical Context',
+        content: `However, historical trends suggest that technology often creates more jobs than it destroys. The transition period is usually the most challenging. Societies must adapt their educational systems to prepare the workforce for a future where collaboration with machines is the norm.`
+      }
+    ]
   },
   {
     id: 'b3',
@@ -87,9 +106,23 @@ However, historical trends suggest that technology often creates more jobs than 
     excerpt: 'Quantum entanglement defies classical intuition, suggesting a universe far more interconnected than previously conceived.',
     requiredPlan: ['TRAILER', 'YEARLY'],
     archived: false,
-    content: `Quantum entanglement defies classical intuition, suggesting a universe far more interconnected than previously conceived. When two particles become entangled, the state of one instantly influences the other, regardless of the vast distance separating them. Einstein famously derided this as "spooky action at a distance."
-
-Contemporary physicists, however, are harnessing this phenomenon for cryptography and computing. The implications are profound: if information can be teleported, the fundamental constraints of space-time might be negotiable.`
+    chapters: [
+      {
+        id: 'c1',
+        title: 'Entanglement',
+        content: `Quantum entanglement defies classical intuition, suggesting a universe far more interconnected than previously conceived. When two particles become entangled, the state of one instantly influences the other, regardless of the vast distance separating them.`
+      },
+      {
+        id: 'c2',
+        title: 'Spooky Action',
+        content: `Einstein famously derided this as "spooky action at a distance." Contemporary physicists, however, are harnessing this phenomenon for cryptography and computing.`
+      },
+      {
+        id: 'c3',
+        title: 'Future Implications',
+        content: `The implications are profound: if information can be teleported, the fundamental constraints of space-time might be negotiable.`
+      }
+    ]
   }
 ];
 

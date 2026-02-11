@@ -1,38 +1,45 @@
 
-const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyDdOjjPxCr9QDUaBrd7ls3XGS1D1Xh9G74';
+const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyBEC-8RfB8HRMxAPSAhDQTInJOmjVR-k0I';
 const GOOGLE_TRANSLATE_API_URL = 'https://translation.googleapis.com/language/translate/v2';
 
-export const translateWithGoogle = async (text: string): Promise<string | null> => {
-  if (!text) return null;
+export const translateWithGoogle = async (text: string): Promise<string> => {
+  if (!text) throw new Error("Çevrilecek metin boş olamaz.");
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error("Çevrilecek metin boş olamaz.");
 
   try {
-    const response = await fetch(`${GOOGLE_TRANSLATE_API_URL}?key=${GOOGLE_TRANSLATE_API_KEY}`, {
+    // API Key trimlenerek boşluk hataları önlenir
+    const url = `${GOOGLE_TRANSLATE_API_URL}?key=${GOOGLE_TRANSLATE_API_KEY.trim()}`;
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        q: text,
+        q: cleanText,
         target: 'tr',
-        source: 'en',
         format: 'text'
       })
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-        const errorData = await response.json();
-        console.warn('Google Translate API Error:', errorData);
-        return null;
+        // API'den dönen spesifik hata mesajını al
+        const errorMessage = data.error?.message || response.statusText;
+        console.error('❌ Google Translate API Error:', errorMessage);
+        throw new Error(errorMessage);
     }
 
-    const data = await response.json();
     if (data.data && data.data.translations && data.data.translations.length > 0) {
         return data.data.translations[0].translatedText;
     }
-    return null;
+    
+    throw new Error('Google Translate boş yanıt döndü.');
 
-  } catch (error) {
-    console.warn("Google Translate Service unavailable:", error);
-    return null;
+  } catch (error: any) {
+    // Ağ hatası veya API hatasını yukarı fırlat
+    throw new Error(error.message || "Bilinmeyen çeviri hatası");
   }
 };

@@ -1,4 +1,5 @@
-import { Book, User, VocabularyWord, BookStatus, PlanConfig, DefinitionResponse } from '../types';
+
+import { Book, User, VocabularyWord, BookStatus, PlanConfig, DefinitionResponse, UserBookProgress } from '../types';
 import { MOCK_BOOKS, DEFAULT_PLANS } from './data';
 import { db } from './firebase';
 
@@ -90,6 +91,26 @@ export const initStorage = async () => {
     subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
   };
 
+  const devAdmin: User = {
+    id: 'admin-dev',
+    email: 'a',
+    name: 'Dev Admin',
+    password: 'a',
+    avatarUrl: 'https://api.dicebear.com/9.x/bottts/svg?seed=Admin',
+    languagePreference: 'TR',
+    role: 'ADMIN',
+    streak: 100,
+    xp: 5000,
+    dailyGoal: 20,
+    lastVisitDate: Date.now(),
+    subscriptionStatus: 'ACTIVE',
+    plan: 'YEARLY',
+    trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+    subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
+  };
+
+  const defaultUsers = [adminUser, devAdmin];
+
   const seedLocal = () => {
       if (!localStorage.getItem(LOCAL_KEYS.BOOKS)) {
           localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(MOCK_BOOKS));
@@ -99,10 +120,13 @@ export const initStorage = async () => {
       }
       const usersStr = localStorage.getItem(LOCAL_KEYS.USERS);
       let localUsers: User[] = usersStr ? JSON.parse(usersStr) : [];
-      if (!localUsers.find(u => u.email.toLowerCase() === adminUser.email.toLowerCase())) {
-          localUsers.push(adminUser);
-          localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(localUsers));
-      }
+      
+      defaultUsers.forEach(defUser => {
+        if (!localUsers.find(u => u.email.toLowerCase() === defUser.email.toLowerCase())) {
+            localUsers.push(defUser);
+        }
+      });
+      localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(localUsers));
   };
 
   await withFallback(
@@ -119,9 +143,12 @@ export const initStorage = async () => {
                 await db!.collection(PLANS_COL).doc(plan.id).set(plan);
             }
         }
-        const adminQuery = await db!.collection(USERS_COL).where('email', '==', adminUser.email).get();
-        if (adminQuery.empty) {
-            await db!.collection(USERS_COL).doc(adminUser.id).set(adminUser);
+        
+        for (const defUser of defaultUsers) {
+            const adminQuery = await db!.collection(USERS_COL).where('email', '==', defUser.email).get();
+            if (adminQuery.empty) {
+                await db!.collection(USERS_COL).doc(defUser.id).set(defUser);
+            }
         }
       },
       seedLocal
@@ -295,20 +322,44 @@ export const saveUserVocab = async (userId: string, words: VocabularyWord[]) => 
     );
 };
 
-export const getUserProgress = async (userId: string): Promise<Record<string, BookStatus>> => {
+// HELPER: Normalize raw data to UserBookProgress objects
+const normalizeProgressData = (data: any): Record<string, UserBookProgress> => {
+    const normalized: Record<string, UserBookProgress> = {};
+    if (!data) return normalized;
+
+    for (const key in data) {
+        if (typeof data[key] === 'string') {
+            // Convert Legacy String Status to Object
+            normalized[key] = {
+                bookId: key,
+                status: data[key] as BookStatus,
+                currentChapterIndex: data[key] === 'COMPLETED' ? 999 : 0,
+                lastReadAt: new Date()
+            };
+        } else {
+            // Already an object
+            normalized[key] = data[key];
+        }
+    }
+    return normalized;
+};
+
+export const getUserProgress = async (userId: string): Promise<Record<string, UserBookProgress>> => {
     return withFallback(
         async () => {
             const docSnap = await db!.collection(PROGRESS_COL).doc(userId).get();
-            return docSnap.exists ? docSnap.data()?.progress : {};
+            const rawData = docSnap.exists ? docSnap.data()?.progress : {};
+            return normalizeProgressData(rawData);
         },
         () => {
             const progStr = localStorage.getItem(LOCAL_KEYS.PROGRESS_PREFIX + userId);
-            return progStr ? JSON.parse(progStr) : {};
+            const rawData = progStr ? JSON.parse(progStr) : {};
+            return normalizeProgressData(rawData);
         }
     );
 };
 
-export const saveUserProgress = async (userId: string, progress: Record<string, BookStatus>) => {
+export const saveUserProgress = async (userId: string, progress: Record<string, UserBookProgress>) => {
     return withFallback(
         async () => await db!.collection(PROGRESS_COL).doc(userId).set({ progress }),
         async () => {

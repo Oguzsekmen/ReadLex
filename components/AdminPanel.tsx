@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus } from '../types';
+import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus, Chapter } from '../types';
 import { getBooks, saveBook, deleteBook, getUsers, saveUser, deleteUser, getPlans, savePlans } from '../services/storage';
-import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2 } from 'lucide-react';
+import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface AdminPanelProps {
@@ -17,9 +18,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const [plans, setPlansList] = useState<PlanConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
+  // Search State
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+
   // Forms
   const [isEditingBook, setIsEditingBook] = useState(false);
   const [currentBook, setCurrentBook] = useState<Partial<Book>>({});
+  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
 
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [targetUser, setTargetUser] = useState<Partial<User>>({});
@@ -32,6 +37,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     refreshData();
   }, []);
 
+  // --- AUTOMATIC ACTIVE CHAPTER MANAGEMENT ---
+  // This effect ensures that if the currently active chapter is deleted,
+  // we automatically switch to another available chapter or clear the selection.
+  useEffect(() => {
+    if (isEditingBook && currentBook.chapters) {
+       const chapters = currentBook.chapters;
+       
+       // If we have chapters but no selection, select the first one
+       if (chapters.length > 0 && !activeChapterId) {
+          setActiveChapterId(chapters[0].id);
+          return;
+       }
+
+       // If we have a selection, make sure it still exists
+       if (activeChapterId) {
+          const exists = chapters.find(c => c.id === activeChapterId);
+          if (!exists) {
+             // Selected chapter was deleted, switch to first available or null
+             setActiveChapterId(chapters.length > 0 ? chapters[0].id : null);
+          }
+       }
+    }
+  }, [currentBook.chapters, isEditingBook, activeChapterId]);
+
   const refreshData = async () => {
     setIsLoading(true);
     const [b, u, p] = await Promise.all([getBooks(), getUsers(), getPlans()]);
@@ -43,9 +72,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
 
   // --- Book Handlers ---
   const handleEditBook = (book?: Book) => {
-    setCurrentBook(book || { 
-      id: '', title: '', author: '', level: 'A1', coverUrl: 'https://picsum.photos/300/450', content: '', excerpt: '', totalWords: 0, requiredPlan: ['FREE'], archived: false 
-    });
+    // Deep copy to ensure we don't mutate state directly and to detach references
+    const initBook: Partial<Book> = book 
+      ? JSON.parse(JSON.stringify(book)) 
+      : { 
+          id: '', 
+          title: '', 
+          author: '', 
+          level: 'A1' as CEFRLevel, 
+          coverUrl: 'https://picsum.photos/300/450', 
+          chapters: [], 
+          excerpt: '', 
+          totalWords: 0, 
+          requiredPlan: ['FREE'], 
+          archived: false 
+        };
+
+    // --- DATA INTEGRITY FIX ---
+    // Check for duplicate IDs in chapters immediately upon opening.
+    // This fixes "broken" books from previous bugs.
+    if (initBook.chapters && initBook.chapters.length > 0) {
+        const seenIds = new Set<string>();
+        initBook.chapters = initBook.chapters.map((c) => {
+            if (!c.id || seenIds.has(c.id)) {
+                // Generate a fresh unique ID if duplicate found
+                const newId = `c-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                return { ...c, id: newId };
+            }
+            seenIds.add(c.id);
+            return c;
+        });
+    } else {
+        initBook.chapters = [];
+    }
+
+    setCurrentBook(initBook);
+    
+    // Set active chapter to first one if exists
+    if (initBook.chapters.length > 0) {
+      setActiveChapterId(initBook.chapters[0].id);
+    } else {
+      setActiveChapterId(null);
+    }
+
     setIsEditingBook(true);
   };
 
@@ -58,8 +127,53 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     }
   };
 
+  // Chapter Logic
+  const handleAddChapter = () => {
+    const newChapter: Chapter = {
+      // Robust unique ID generation
+      id: `c-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: 'New Chapter',
+      content: ''
+    };
+    
+    setCurrentBook(prevBook => {
+        const updatedChapters = [...(prevBook.chapters || []), newChapter];
+        return { ...prevBook, chapters: updatedChapters };
+    });
+    
+    // Immediately select the new chapter
+    setActiveChapterId(newChapter.id);
+  };
+
+  const handleDeleteChapter = (indexToDelete: number) => {
+    // Removed confirmation dialog to allow faster editing.
+    // Changes are only persisted when "Save" is clicked.
+    
+    setCurrentBook(prev => {
+        const currentChapters = prev.chapters || [];
+        // Filter by index is the safest way to remove exactly what was clicked
+        const updatedChapters = currentChapters.filter((_, idx) => idx !== indexToDelete);
+        return { ...prev, chapters: updatedChapters };
+    });
+    
+    // NOTE: Active chapter update is handled by the useEffect above
+  };
+
+  const updateChapter = (id: string, field: keyof Chapter, value: string) => {
+     setCurrentBook(prev => {
+        const updatedChapters = (prev.chapters || []).map(c => {
+            if (c.id === id) return { ...c, [field]: value };
+            return c;
+        });
+        return { ...prev, chapters: updatedChapters };
+     });
+  };
+
   const handleSaveBook = async () => {
-    if (!currentBook.title || !currentBook.content) return alert(t('fillAllFields', currentUser.languagePreference));
+    if (!currentBook.title || (currentBook.chapters?.length === 0)) return alert("Title and at least one chapter required.");
+
+    // Recalculate total words
+    const totalWords = (currentBook.chapters || []).reduce((acc, c) => acc + c.content.split(' ').length, 0);
 
     const bookToSave: Book = {
       id: currentBook.id || 'b-' + Date.now(),
@@ -67,9 +181,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       author: currentBook.author || 'Unknown',
       level: currentBook.level as CEFRLevel,
       coverUrl: currentBook.coverUrl || '',
-      content: currentBook.content!,
-      excerpt: currentBook.excerpt || currentBook.content!.substring(0, 100),
-      totalWords: currentBook.content!.split(' ').length,
+      chapters: currentBook.chapters || [],
+      excerpt: currentBook.excerpt || (currentBook.chapters?.[0]?.content.substring(0, 100) || ''),
+      totalWords: totalWords,
       requiredPlan: currentBook.requiredPlan && currentBook.requiredPlan.length > 0 ? currentBook.requiredPlan : ['FREE'],
       archived: currentBook.archived || false
     };
@@ -202,6 +316,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
 
   const lang = currentUser.languagePreference;
 
+  // Filter Users
+  const filteredUsers = users.filter(u => 
+    u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
+    u.email.toLowerCase().includes(userSearchTerm.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -244,14 +364,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
 
           {isEditingBook ? (
             <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-2xl animate-in slide-in-from-top-4">
-               {/* Same Form as before, logic handled by handleSaveBook async */}
                <h3 className="font-bold text-lg mb-4 dark:text-white">{currentBook.id ? t('edit', lang) : t('addBook', lang)}</h3>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                  <div>
                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('title', lang)}</label>
                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.title || ''} onChange={e => setCurrentBook({...currentBook, title: e.target.value})} />
                  </div>
-                 {/* ... Rest of fields truncated for brevity as they are just UI inputs ... */}
                  <div>
                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('author', lang)}</label>
                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.author || ''} onChange={e => setCurrentBook({...currentBook, author: e.target.value})} />
@@ -266,7 +384,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('coverUrl', lang)}</label>
                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.coverUrl || ''} onChange={e => setCurrentBook({...currentBook, coverUrl: e.target.value})} />
                  </div>
-                 
+                 <div className="col-span-full">
+                   <label className="block text-sm font-bold text-gray-500 mb-1">{t('excerpt', lang)}</label>
+                   <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.excerpt || ''} onChange={e => setCurrentBook({...currentBook, excerpt: e.target.value})} />
+                 </div>
+
                  <div className="col-span-full">
                    <label className="block text-sm font-bold text-gray-500 mb-2">Required Plans</label>
                    <div className="flex gap-4 flex-wrap">
@@ -290,24 +412,91 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                       ))}
                    </div>
                  </div>
-
-                 <div className="flex items-center pt-6">
-                    <label className="flex items-center cursor-pointer">
-                      <input type="checkbox" checked={currentBook.archived || false} onChange={e => setCurrentBook({...currentBook, archived: e.target.checked})} className="w-5 h-5 text-brand-600 rounded" />
-                      <span className="ml-2 font-bold text-gray-700 dark:text-gray-300">Archived (Hidden)</span>
-                    </label>
-                 </div>
-                 
-                 <div className="col-span-full">
-                   <label className="block text-sm font-bold text-gray-500 mb-1">{t('excerpt', lang)}</label>
-                   <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={currentBook.excerpt || ''} onChange={e => setCurrentBook({...currentBook, excerpt: e.target.value})} />
-                 </div>
-                 <div className="col-span-full">
-                   <label className="block text-sm font-bold text-gray-500 mb-1">{t('content', lang)}</label>
-                   <textarea rows={10} className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white font-mono text-sm leading-relaxed" value={currentBook.content || ''} onChange={e => setCurrentBook({...currentBook, content: e.target.value})} placeholder="Enter book content here. Use new lines for paragraphs." />
-                 </div>
                </div>
-               <div className="flex justify-end gap-3 mt-4">
+
+               {/* CHAPTER MANAGEMENT */}
+               <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <div className="flex justify-between items-center mb-4">
+                     <h4 className="font-bold text-lg dark:text-white flex items-center"><List className="mr-2" /> Chapters</h4>
+                     <button 
+                       type="button" 
+                       onClick={handleAddChapter} 
+                       className="text-sm bg-brand-100 text-brand-600 px-3 py-1 rounded-lg font-bold hover:bg-brand-200 flex items-center"
+                     >
+                        <Plus size={14} className="mr-1" /> Add Chapter
+                     </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     {/* Chapter List Sidebar */}
+                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                        {(currentBook.chapters || []).map((chapter, idx) => (
+                           <div 
+                             key={`${chapter.id}-${idx}`} // Use combined key to handle legacy duplicate IDs gracefully in list before save
+                             onClick={() => setActiveChapterId(chapter.id)}
+                             className={`p-3 rounded-lg border cursor-pointer flex justify-between items-center group ${
+                                activeChapterId === chapter.id 
+                                ? 'bg-brand-600 text-white border-brand-600' 
+                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-brand-300'
+                             }`}
+                           >
+                              <div className="truncate pr-2">
+                                 <span className="font-black text-xs opacity-70 mr-2">{idx + 1}.</span>
+                                 <span className="font-bold text-sm">{chapter.title || 'Untitled'}</span>
+                              </div>
+                              <button 
+                                type="button" 
+                                // Delete by index to ensure the correct item is removed even if IDs are duplicate in memory
+                                onClick={(e) => { e.stopPropagation(); handleDeleteChapter(idx); }} 
+                                className={`p-2 rounded hover:bg-red-500 hover:text-white ${activeChapterId === chapter.id ? 'text-white/70' : 'text-gray-400'}`}
+                                title="Delete Chapter"
+                              >
+                                 <Trash2 size={16} />
+                              </button>
+                           </div>
+                        ))}
+                        {(currentBook.chapters || []).length === 0 && (
+                           <p className="text-sm text-gray-400 text-center py-4">No chapters added.</p>
+                        )}
+                     </div>
+
+                     {/* Chapter Editor */}
+                     <div className="md:col-span-2 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                        {activeChapterId ? (
+                           (() => {
+                              const chapter = (currentBook.chapters || []).find(c => c.id === activeChapterId);
+                              if (!chapter) return null;
+                              return (
+                                 <div className="space-y-4">
+                                    <div>
+                                       <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Chapter Title</label>
+                                       <input 
+                                          className="w-full p-2 border rounded dark:bg-gray-900 dark:text-white font-bold" 
+                                          value={chapter.title} 
+                                          onChange={(e) => updateChapter(chapter.id, 'title', e.target.value)} 
+                                       />
+                                    </div>
+                                    <div>
+                                       <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Content</label>
+                                       <textarea 
+                                          rows={12} 
+                                          className="w-full p-3 border rounded dark:bg-gray-900 dark:text-white font-mono text-sm leading-relaxed" 
+                                          value={chapter.content} 
+                                          onChange={(e) => updateChapter(chapter.id, 'content', e.target.value)} 
+                                          placeholder="Enter chapter text..."
+                                       />
+                                    </div>
+                                 </div>
+                              );
+                           })()
+                        ) : (
+                           <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">Select or add a chapter</div>
+                        )}
+                     </div>
+                  </div>
+               </div>
+
+               <div className="flex justify-end gap-3 mt-8 border-t border-gray-200 dark:border-gray-700 pt-4">
                  <button onClick={() => setIsEditingBook(false)} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg font-bold">{t('cancel', lang)}</button>
                  <button onClick={handleSaveBook} className="px-4 py-2 bg-brand-600 text-white rounded-lg font-bold">{t('save', lang)}</button>
                </div>
@@ -319,6 +508,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                    <tr>
                      <th className="p-3">Img</th>
                      <th className="p-3">{t('title', lang)}</th>
+                     <th className="p-3">Chapters</th>
                      <th className="p-3">Access</th>
                      <th className="p-3">Status</th>
                      <th className="p-3">{t('actions', lang)}</th>
@@ -329,6 +519,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                     <tr key={b.id} className={b.archived ? 'opacity-50 bg-gray-50 dark:bg-gray-900' : ''}>
                       <td className="p-3"><img src={b.coverUrl} className="w-10 h-14 object-cover rounded" /></td>
                       <td className="p-3 font-bold dark:text-white">{b.title}</td>
+                      <td className="p-3 dark:text-white">{b.chapters?.length || 0}</td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {b.requiredPlan.map(p => (
@@ -360,11 +551,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       {/* --- USERS TAB --- */}
       {activeTab === 'USERS' && (
         <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
-           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold dark:text-white">User List ({users.length})</h2>
-            <button onClick={() => handleEditUser()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center">
-              <Plus size={18} className="mr-2" /> {t('addUser', lang)}
-            </button>
+           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h2 className="text-xl font-bold dark:text-white whitespace-nowrap">User List ({users.length})</h2>
+            <div className="flex gap-2 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search name or email..." 
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                </div>
+                <button onClick={() => handleEditUser()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center whitespace-nowrap">
+                  <Plus size={18} className="mr-2" /> {t('addUser', lang)}
+                </button>
+            </div>
           </div>
 
           {isEditingUser ? (
@@ -430,7 +633,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {users.map(u => (
+                  {filteredUsers.map(u => (
                     <tr key={u.id}>
                       <td className="p-3 dark:text-white">{u.email}</td>
                       <td className="p-3 font-bold dark:text-white">{u.name}</td>
@@ -444,6 +647,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                       </td>
                     </tr>
                   ))}
+                  {filteredUsers.length === 0 && (
+                      <tr>
+                          <td colSpan={5} className="p-8 text-center text-gray-500 font-bold">
+                             No users found matching "{userSearchTerm}"
+                          </td>
+                      </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -454,7 +664,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       {/* --- PLANS TAB --- */}
       {activeTab === 'PLANS' && (
          <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-100 dark:border-gray-700 shadow-sm">
-            {/* Same as before but with async handlers */}
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold dark:text-white">Manage Subscription Plans</h2>
                 <button onClick={() => handleEditPlan()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center">

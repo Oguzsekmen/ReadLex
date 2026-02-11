@@ -1,11 +1,12 @@
+
 import React, { useState, useMemo } from 'react';
-import { Book, BookStatus, CEFRLevel, User, PlanType } from '../types';
+import { Book, BookStatus, CEFRLevel, User, PlanType, UserBookProgress } from '../types';
 import { CheckCircle, Clock, CircleDashed, Lock, Sparkles } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface LibraryProps {
   books: Book[];
-  progressMap: Record<string, BookStatus>;
+  progressMap: Record<string, UserBookProgress>;
   onSelectBook: (b: Book) => void;
   user: User;
 }
@@ -92,7 +93,8 @@ const Library: React.FC<LibraryProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredBooks.map(book => {
-          const status = progressMap[book.id] || 'NOT_STARTED';
+          const progress = progressMap[book.id];
+          const status = progress?.status || 'NOT_STARTED';
           const isLocked = !canAccessBook(book.requiredPlan);
 
           return (

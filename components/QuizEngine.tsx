@@ -60,6 +60,9 @@ const QuizEngine: React.FC<QuizEngineProps> = ({ words, onComplete, onExit }) =>
       else if (typeSeed > 0.50) type = 'LISTEN';
       else if (typeSeed > 0.25) type = 'MC_TR_EN';
 
+      // Çeldiricileri belirle
+      // MC_EN_TR veya LISTEN ise (Cevap Türkçe olacak), çeldiriciler Türkçe olmalı (translation)
+      // MC_TR_EN ise (Cevap İngilizce olacak), çeldiriciler İngilizce olmalı (word)
       const distractors = words
         .filter(w => w.id !== word.id)
         .sort(() => 0.5 - Math.random())
@@ -72,21 +75,25 @@ const QuizEngine: React.FC<QuizEngineProps> = ({ words, onComplete, onExit }) =>
 
       switch (type) {
         case 'MC_EN_TR':
-          questionText = `What is the Turkish meaning of "${word.word}"?`;
+          // Soru: İngilizce Kelime -> Cevap: Türkçe Anlam
+          questionText = `"${word.word}" kelimesinin Türkçe anlamı nedir?`;
           correctAnswer = word.translation;
           options = [...distractors, correctAnswer].sort(() => 0.5 - Math.random());
           break;
         case 'MC_TR_EN':
-          questionText = `Which word means "${word.translation}"?`;
+          // Soru: Türkçe Anlam -> Cevap: İngilizce Kelime
+          questionText = `"${word.translation}" anlamına gelen İngilizce kelime hangisidir?`;
           correctAnswer = word.word;
           options = [...distractors, correctAnswer].sort(() => 0.5 - Math.random());
           break;
         case 'WRITE':
-          questionText = `Type the English word for "${word.translation}"`;
+          // Soru: Türkçe Anlam -> Cevap: İngilizce Yazma
+          questionText = `"${word.translation}" kelimesinin İngilizcesini yazın:`;
           correctAnswer = word.word;
           break;
         case 'LISTEN':
-          questionText = "Listen and select the correct meaning";
+          // Soru: Ses (İngilizce) -> Cevap: Türkçe Anlam
+          questionText = "Duyduğunuz kelimenin doğru anlamını seçin:";
           correctAnswer = word.translation;
           options = [...distractors, correctAnswer].sort(() => 0.5 - Math.random());
           break;
@@ -201,7 +208,7 @@ const QuizEngine: React.FC<QuizEngineProps> = ({ words, onComplete, onExit }) =>
           </span>
         </div>
 
-        <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-8 text-center leading-tight">
+        <h3 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white mb-8 text-center leading-tight">
           {q.question}
         </h3>
 

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 import { saveUser, getUserByEmail, getUserById } from '../services/storage';
@@ -26,7 +27,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     const normalizedEmail = email.toLowerCase().trim();
 
     try {
-        if (!normalizedEmail.includes('@') || password.length < 4) {
+        // Dev Admin 'a'/'a' bypass logic
+        const isDevBypass = normalizedEmail === 'a' && password === 'a';
+
+        if (!isDevBypass && (!normalizedEmail.includes('@') || password.length < 4)) {
           throw new Error(lang === 'TR' ? 'Geçerli bir e-posta ve en az 4 haneli şifre girin.' : 'Please provide a valid email and a password (min 4 chars).');
         }
 
@@ -198,7 +202,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <div className="relative">
                 <Mail className="absolute left-4 top-3.5 text-gray-400" size={20} />
                 <input
-                  type="email"
+                  type="text"
                   placeholder={lang === 'TR' ? 'E-posta' : 'Email'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
