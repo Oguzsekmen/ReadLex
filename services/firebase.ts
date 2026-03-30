@@ -1,8 +1,9 @@
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/firestore';
-import 'firebase/compat/auth';
-import 'firebase/compat/analytics';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { getAnalytics, Analytics } from 'firebase/analytics';
 
+// Configuration provided by user
 const firebaseConfig = {
   apiKey: "AIzaSyBIsMET8iCQWTlr_CSoD98PC6Zr3_xIuSg",
   authDomain: "readlex-app-c1912.firebaseapp.com",
@@ -14,45 +15,58 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase variables
-let app: firebase.app.App | undefined;
-let db: firebase.firestore.Firestore | undefined;
-let auth: firebase.auth.Auth | undefined;
-let googleProvider: firebase.auth.GoogleAuthProvider | undefined;
-let analytics: firebase.analytics.Analytics | undefined;
+let app: FirebaseApp | undefined;
+let db: Firestore | undefined;
+let auth: Auth | undefined;
+let googleProvider: GoogleAuthProvider | undefined;
+let analytics: Analytics | undefined;
+let initializationError: string | null = null;
 
 try {
     if (typeof window !== 'undefined') {
-        if (!firebase.apps.length) {
-            app = firebase.initializeApp(firebaseConfig);
-        } else {
-            app = firebase.app();
+        // Initialize App
+        try {
+            if (!getApps().length) {
+                app = initializeApp(firebaseConfig);
+            } else {
+                app = getApp();
+            }
+        } catch (appError: any) {
+            console.error("Firebase App init failed:", appError);
+            initializationError = appError.message || "App init failed";
         }
 
-        // Initialize Analytics safely
-        try {
-            analytics = firebase.analytics();
-        } catch (analyticsError) {
-             console.log("Analytics not supported in this environment");
-        }
+        if (app) {
+            // Initialize Analytics safely
+            try {
+                analytics = getAnalytics(app);
+            } catch (analyticsError) {
+                 console.log("Analytics not supported in this environment");
+            }
 
-        // Initialize services individually to isolate failures
-        try {
-            db = firebase.firestore();
-            console.log("✅ Firebase Firestore initialized");
-        } catch (dbError) {
-            console.warn("Firebase Firestore init failed:", dbError);
-        }
+            // Initialize Firestore
+            try {
+                db = getFirestore(app);
+                console.log("✅ Firebase Firestore initialized");
+            } catch (dbError: any) {
+                console.warn("Firebase Firestore init failed:", dbError);
+                initializationError = dbError.message || "Firestore init failed";
+            }
 
-        try {
-            auth = firebase.auth();
-            googleProvider = new firebase.auth.GoogleAuthProvider();
-            console.log("✅ Firebase Auth initialized");
-        } catch (authError) {
-            console.warn("Firebase Auth init failed:", authError);
+            // Initialize Auth
+            try {
+                auth = getAuth(app);
+                googleProvider = new GoogleAuthProvider();
+                console.log("✅ Firebase Auth initialized");
+            } catch (authError: any) {
+                console.warn("Firebase Auth init failed:", authError);
+                if (!initializationError) initializationError = authError.message || "Auth init failed";
+            }
         }
     }
 } catch (e: any) {
     console.error("❌ Firebase Initialization Error:", e.message);
+    initializationError = e.message;
 }
 
-export { db, auth, googleProvider, analytics };
+export { db, auth, googleProvider, analytics, initializationError };

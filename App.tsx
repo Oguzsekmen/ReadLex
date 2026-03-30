@@ -17,15 +17,18 @@ import {
   saveSession,
   getSession,
   clearSession,
-  getUserById
+  getUserById,
+  isUsingFirebase,
+  lastFirebaseError
 } from './services/storage';
+import { initializationError } from './services/firebase';
 import { t } from './services/i18n';
 import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
 import ChapterList from './components/ChapterList'; 
 import QuizEngine from './components/QuizEngine';
 import AdminPanel from './components/AdminPanel'; 
-import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
+import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookOpen, Loader2, WifiOff, RefreshCw } from 'lucide-react';
 import Library from './components/Library';
 
 // --- Vocabulary Wrapper ---
@@ -337,6 +340,7 @@ const App = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
 
   // Dynamic Data
   const [books, setBooks] = useState<Book[]>([]);
@@ -350,6 +354,8 @@ const App = () => {
       try {
         setIsLoading(true);
         await initStorage();
+        setIsOnline(isUsingFirebase());
+        
         const loadedPlans = await getPlans();
         setPlans(loadedPlans);
 
@@ -374,6 +380,30 @@ const App = () => {
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
+
+  // ... (rest of effects)
+
+  const renderOfflineBanner = () => {
+    if (isOnline && !lastFirebaseError) return null;
+    
+    const errorMsg = initializationError || lastFirebaseError || "Connection Lost";
+
+    return (
+      <div className="bg-red-500 text-white px-4 py-2 text-center text-sm font-bold flex flex-col md:flex-row items-center justify-center gap-2 sticky top-0 z-50 shadow-md">
+        <div className="flex items-center gap-2">
+          <WifiOff size={16} />
+          <span>Database Connection Failed - Using Local Storage</span>
+        </div>
+        <span className="text-xs bg-red-700 px-2 py-1 rounded">Error: {errorMsg}</span>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="ml-4 bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg flex items-center text-xs transition-colors"
+        >
+          <RefreshCw size={12} className="mr-1" /> Retry
+        </button>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (user && user.subscriptionStatus === 'TRIAL') {
@@ -732,22 +762,25 @@ const App = () => {
   };
 
   return (
-    <Layout 
-      activePage={currentPage} 
-      onNavigate={(p) => {
-        setCurrentPage(p);
-        setSelectedBook(null);
-        setActiveChapterIndex(null);
-        setIsQuizActive(false);
-      }}
-      isDarkMode={isDarkMode}
-      toggleTheme={() => setIsDarkMode(!isDarkMode)}
-      currentUser={user}
-      onToggleLang={handleToggleLanguage}
-      onLogout={handleLogout}
-    >
-      {renderContent()}
-    </Layout>
+    <div className="flex flex-col h-screen">
+      {renderOfflineBanner()}
+      <Layout 
+        activePage={currentPage} 
+        onNavigate={(p) => {
+          setCurrentPage(p);
+          setSelectedBook(null);
+          setActiveChapterIndex(null);
+          setIsQuizActive(false);
+        }}
+        isDarkMode={isDarkMode}
+        toggleTheme={() => setIsDarkMode(!isDarkMode)}
+        currentUser={user}
+        onToggleLang={handleToggleLanguage}
+        onLogout={handleLogout}
+      >
+        {renderContent()}
+      </Layout>
+    </div>
   );
 };
 

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { saveUser, getUserByEmail, getUserById } from '../services/storage';
 import { auth, googleProvider } from '../services/firebase';
+import { signInWithPopup } from 'firebase/auth';
 import { Mail, Lock, User as UserIcon, ArrowRight, BookOpen, Globe, Loader2, AlertCircle } from 'lucide-react';
 import { t } from '../services/i18n';
 
@@ -86,7 +87,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      const result = await auth.signInWithPopup(googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
       const fbUser = result.user;
       if (!fbUser) throw new Error("Google'dan kullanıcı bilgisi alınamadı.");
 

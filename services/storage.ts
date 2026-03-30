@@ -1,7 +1,17 @@
-
 import { Book, User, VocabularyWord, BookStatus, PlanConfig, DefinitionResponse, UserBookProgress } from '../types';
 import { MOCK_BOOKS, DEFAULT_PLANS } from './data';
 import { db } from './firebase';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  writeBatch 
+} from 'firebase/firestore';
 
 // Collection Names
 const USERS_COL = 'users';
@@ -9,7 +19,7 @@ const BOOKS_COL = 'books';
 const PLANS_COL = 'plans';
 const VOCAB_COL = 'vocabulary';
 const PROGRESS_COL = 'progress';
-const DICT_CACHE_COL = 'dictionary_cache'; // Yeni: Global çeviri önbelleği
+const DICT_CACHE_COL = 'dictionary_cache';
 
 // Local Storage Keys
 const LOCAL_KEYS = {
@@ -18,10 +28,16 @@ const LOCAL_KEYS = {
   PLANS: 'readlex_plans',
   VOCAB_PREFIX: 'readlex_vocab_',
   PROGRESS_PREFIX: 'readlex_progress_',
-  GLOBAL_DICT: 'readlex_global_dict' // Yeni: Yerel çeviri önbelleği
+  GLOBAL_DICT: 'readlex_global_dict'
 };
 
 const SESSION_KEY = 'readlex_session_uid';
+
+export let lastFirebaseError: string | null = null;
+
+export const isUsingFirebase = (): boolean => {
+  return !!db;
+};
 
 const isFirebaseReady = () => !!db;
 
@@ -35,7 +51,8 @@ async function withFallback<T>(
     try {
         return await firebaseOp();
     } catch (err: any) {
-        console.warn(`Firebase operation failed. Falling back to LocalStorage.`);
+        console.warn(`Firebase operation failed. Falling back to LocalStorage. Error: ${err.message}`);
+        lastFirebaseError = err.message;
         return localOp();
     }
 }
@@ -46,8 +63,9 @@ export const getCachedDefinition = async (word: string): Promise<DefinitionRespo
     const normalized = word.toLowerCase().trim();
     return withFallback(
         async () => {
-            const doc = await db!.collection(DICT_CACHE_COL).doc(normalized).get();
-            return doc.exists ? (doc.data() as DefinitionResponse) : null;
+            const docRef = doc(db!, DICT_CACHE_COL, normalized);
+            const docSnap = await getDoc(docRef);
+            return docSnap.exists() ? (docSnap.data() as DefinitionResponse) : null;
         },
         () => {
             const dictStr = localStorage.getItem(LOCAL_KEYS.GLOBAL_DICT);
@@ -60,7 +78,7 @@ export const getCachedDefinition = async (word: string): Promise<DefinitionRespo
 export const saveDefinitionToCache = async (word: string, definition: DefinitionResponse) => {
     const normalized = word.toLowerCase().trim();
     return withFallback(
-        async () => await db!.collection(DICT_CACHE_COL).doc(normalized).set(definition),
+        async () => await setDoc(doc(db!, DICT_CACHE_COL, normalized), definition),
         () => {
             const dictStr = localStorage.getItem(LOCAL_KEYS.GLOBAL_DICT);
             const dict = dictStr ? JSON.parse(dictStr) : {};
@@ -131,23 +149,24 @@ export const initStorage = async () => {
 
   await withFallback(
       async () => {
-        const booksSnapshot = await db!.collection(BOOKS_COL).get();
+        const booksSnapshot = await getDocs(collection(db!, BOOKS_COL));
         if (booksSnapshot.empty) {
             for (const book of MOCK_BOOKS) {
-                await db!.collection(BOOKS_COL).doc(book.id).set(book);
+                await setDoc(doc(db!, BOOKS_COL, book.id), book);
             }
         }
-        const plansSnapshot = await db!.collection(PLANS_COL).get();
+        const plansSnapshot = await getDocs(collection(db!, PLANS_COL));
         if (plansSnapshot.empty) {
             for (const plan of DEFAULT_PLANS) {
-                await db!.collection(PLANS_COL).doc(plan.id).set(plan);
+                await setDoc(doc(db!, PLANS_COL, plan.id), plan);
             }
         }
         
         for (const defUser of defaultUsers) {
-            const adminQuery = await db!.collection(USERS_COL).where('email', '==', defUser.email).get();
+            const q = query(collection(db!, USERS_COL), where('email', '==', defUser.email));
+            const adminQuery = await getDocs(q);
             if (adminQuery.empty) {
-                await db!.collection(USERS_COL).doc(defUser.id).set(defUser);
+                await setDoc(doc(db!, USERS_COL, defUser.id), defUser);
             }
         }
       },
@@ -158,7 +177,7 @@ export const initStorage = async () => {
 export const getUsers = async (): Promise<User[]> => {
   return withFallback(
       async () => {
-          const snapshot = await db!.collection(USERS_COL).get();
+          const snapshot = await getDocs(collection(db!, USERS_COL));
           return snapshot.docs.map(d => d.data() as User);
       },
       () => {
@@ -171,7 +190,7 @@ export const getUsers = async (): Promise<User[]> => {
 export const saveUser = async (user: User) => {
   const normalizedUser = { ...user, email: user.email.toLowerCase().trim() };
   return withFallback(
-      async () => await db!.collection(USERS_COL).doc(normalizedUser.id).set(normalizedUser),
+      async () => await setDoc(doc(db!, USERS_COL, normalizedUser.id), normalizedUser),
       async () => {
           const users = await getUsers();
           const index = users.findIndex(u => u.id === normalizedUser.id);
@@ -184,7 +203,7 @@ export const saveUser = async (user: User) => {
 
 export const deleteUser = async (userId: string) => {
     return withFallback(
-        async () => await db!.collection(USERS_COL).doc(userId).delete(),
+        async () => await deleteDoc(doc(db!, USERS_COL, userId)),
         async () => {
             const users = await getUsers();
             const filtered = users.filter(u => u.id !== userId);
@@ -197,7 +216,8 @@ export const getUserByEmail = async (email: string): Promise<User | undefined> =
     const normalizedEmail = email.toLowerCase().trim();
     return withFallback(
         async () => {
-            const snapshot = await db!.collection(USERS_COL).where("email", "==", normalizedEmail).get();
+            const q = query(collection(db!, USERS_COL), where("email", "==", normalizedEmail));
+            const snapshot = await getDocs(q);
             if (snapshot.empty) return undefined;
             return snapshot.docs[0].data() as User;
         },
@@ -211,8 +231,9 @@ export const getUserByEmail = async (email: string): Promise<User | undefined> =
 export const getUserById = async (id: string): Promise<User | undefined> => {
     return withFallback(
         async () => {
-            const docSnap = await db!.collection(USERS_COL).doc(id).get();
-            return docSnap.exists ? (docSnap.data() as User) : undefined;
+            const docRef = doc(db!, USERS_COL, id);
+            const docSnap = await getDoc(docRef);
+            return docSnap.exists() ? (docSnap.data() as User) : undefined;
         },
         async () => {
             const users = await getUsers();
@@ -236,7 +257,7 @@ export const clearSession = () => {
 export const getBooks = async (): Promise<Book[]> => {
     return withFallback(
         async () => {
-            const snapshot = await db!.collection(BOOKS_COL).get();
+            const snapshot = await getDocs(collection(db!, BOOKS_COL));
             return snapshot.docs.map(d => d.data() as Book);
         },
         () => {
@@ -248,7 +269,7 @@ export const getBooks = async (): Promise<Book[]> => {
 
 export const saveBook = async (book: Book) => {
     return withFallback(
-        async () => await db!.collection(BOOKS_COL).doc(book.id).set(book),
+        async () => await setDoc(doc(db!, BOOKS_COL, book.id), book),
         async () => {
             const books = await getBooks();
             const index = books.findIndex(b => b.id === book.id);
@@ -261,7 +282,7 @@ export const saveBook = async (book: Book) => {
 
 export const deleteBook = async (bookId: string) => {
     return withFallback(
-        async () => await db!.collection(BOOKS_COL).doc(bookId).delete(),
+        async () => await deleteDoc(doc(db!, BOOKS_COL, bookId)),
         async () => {
             const books = await getBooks();
             const filtered = books.filter(b => b.id !== bookId);
@@ -273,7 +294,7 @@ export const deleteBook = async (bookId: string) => {
 export const getPlans = async (): Promise<PlanConfig[]> => {
     return withFallback(
         async () => {
-            const snapshot = await db!.collection(PLANS_COL).get();
+            const snapshot = await getDocs(collection(db!, PLANS_COL));
             const plans = snapshot.docs.map(d => d.data() as PlanConfig);
             return plans.length > 0 ? plans : DEFAULT_PLANS;
         },
@@ -287,9 +308,9 @@ export const getPlans = async (): Promise<PlanConfig[]> => {
 export const savePlans = async (plans: PlanConfig[]) => {
     return withFallback(
         async () => {
-            const batch = db!.batch();
+            const batch = writeBatch(db!);
             for (const plan of plans) {
-                const ref = db!.collection(PLANS_COL).doc(plan.id);
+                const ref = doc(db!, PLANS_COL, plan.id);
                 batch.set(ref, plan);
             }
             await batch.commit();
@@ -303,8 +324,9 @@ export const savePlans = async (plans: PlanConfig[]) => {
 export const getUserVocab = async (userId: string): Promise<VocabularyWord[]> => {
     return withFallback(
         async () => {
-            const docSnap = await db!.collection(VOCAB_COL).doc(userId).get();
-            return docSnap.exists ? docSnap.data()?.words : [];
+            const docRef = doc(db!, VOCAB_COL, userId);
+            const docSnap = await getDoc(docRef);
+            return docSnap.exists() ? docSnap.data()?.words : [];
         },
         () => {
             const vocabStr = localStorage.getItem(LOCAL_KEYS.VOCAB_PREFIX + userId);
@@ -315,7 +337,7 @@ export const getUserVocab = async (userId: string): Promise<VocabularyWord[]> =>
 
 export const saveUserVocab = async (userId: string, words: VocabularyWord[]) => {
     return withFallback(
-        async () => await db!.collection(VOCAB_COL).doc(userId).set({ words }),
+        async () => await setDoc(doc(db!, VOCAB_COL, userId), { words }),
         async () => {
             localStorage.setItem(LOCAL_KEYS.VOCAB_PREFIX + userId, JSON.stringify(words));
         }
@@ -350,8 +372,9 @@ const normalizeProgressData = (data: any): Record<string, UserBookProgress> => {
 export const getUserProgress = async (userId: string): Promise<Record<string, UserBookProgress>> => {
     return withFallback(
         async () => {
-            const docSnap = await db!.collection(PROGRESS_COL).doc(userId).get();
-            const rawData = docSnap.exists ? docSnap.data()?.progress : {};
+            const docRef = doc(db!, PROGRESS_COL, userId);
+            const docSnap = await getDoc(docRef);
+            const rawData = docSnap.exists() ? docSnap.data()?.progress : {};
             return normalizeProgressData(rawData);
         },
         () => {
@@ -364,7 +387,7 @@ export const getUserProgress = async (userId: string): Promise<Record<string, Us
 
 export const saveUserProgress = async (userId: string, progress: Record<string, UserBookProgress>) => {
     return withFallback(
-        async () => await db!.collection(PROGRESS_COL).doc(userId).set({ progress }),
+        async () => await setDoc(doc(db!, PROGRESS_COL, userId), { progress }),
         async () => {
             localStorage.setItem(LOCAL_KEYS.PROGRESS_PREFIX + userId, JSON.stringify(progress));
         }
