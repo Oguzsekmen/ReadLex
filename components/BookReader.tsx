@@ -2,7 +2,8 @@
 // Fixed: Added React to imports to resolve namespace errors
 import React, { useState, useRef, useEffect } from 'react';
 import { Book, VocabularyWord } from '../types';
-import { getWordDefinition, prefetchBookContent, translatePos } from '../services/geminiService';
+import { readerLanguageData, ReaderLanguageChapter, PreparedReaderToken, LatestTapGuard } from '../services/readerLanguageData';
+import { vocabularyFromPreparedToken } from '../services/readerVocabulary';
 import { ArrowLeft, Loader2, Star, Volume2, X, CheckCircle, ZoomIn, ZoomOut, Type, ArrowRight, BookOpen } from 'lucide-react';
 
 interface BookReaderProps {
@@ -19,6 +20,9 @@ interface BookReaderProps {
 interface SelectionState {
   word: string;
   context: string;
+  translatedContext?: string;
+  normalizedWord?: string;
+  tokenIndex: number;
   x: number;
   y: number;
 }
@@ -44,6 +48,9 @@ const BookReader: React.FC<BookReaderProps> = ({
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [isLoadingDef, setIsLoadingDef] = useState(false);
   const [definition, setDefinition] = useState<any>(null);
+  const [translationMessage, setTranslationMessage] = useState<string | null>(null);
+  const [languageChapter, setLanguageChapter] = useState<ReaderLanguageChapter | null>(null);
+  const latestTapRequest = useRef(new LatestTapGuard());
   const textRef = useRef<HTMLDivElement>(null);
 
   const [fontSize, setFontSize] = useState(19);
@@ -84,16 +91,26 @@ const BookReader: React.FC<BookReaderProps> = ({
        }
     }
 
-    if(currentChapter) {
-        prefetchBookContent(currentChapter.content);
-    }
   }, [currentChapterIndex, book.id]);
+
+  useEffect(() => {
+    let active = true;
+    if (book.languageProcessingStatus !== 'COMPLETED') {
+      setLanguageChapter({ mode: 'unavailable', reason: 'NOT_PREPARED' });
+      return () => { active = false; };
+    }
+    setLanguageChapter(null);
+    void readerLanguageData.loadChapter(book.id, currentChapter.id, currentChapter.content)
+      .then(result => { if (active) setLanguageChapter(result); })
+      .catch(() => { if (active) setLanguageChapter({ mode: 'unavailable', reason: 'MISSING_DATA' }); });
+    return () => { active = false; };
+  }, [book.id, book.languageProcessingStatus, currentChapter.id, currentChapter.content]);
 
   const tokenizeText = (text: string) => {
     return text.match(/([\w’']+)|([^\w\s]+)|(\s+)/g) || [];
   };
 
-  const handleWordClick = async (word: string, globalIndex: number, event: React.MouseEvent) => {
+  const handleWordClick = async (word: string, globalIndex: number, event: React.MouseEvent, preparedToken?: PreparedReaderToken) => {
     if (!/\w/.test(word)) return;
 
     // Logic: Update last read word only if we are moving forward
@@ -106,54 +123,43 @@ const BookReader: React.FC<BookReaderProps> = ({
     const x = Math.max(16, Math.min(rect.left + rect.width/2 - 160, window.innerWidth - 336)); 
     const y = rect.bottom + window.scrollY + 12;
 
-    const fullSentence = getSentenceContext(currentChapter.content, word);
-
-    setSelection({ word, context: fullSentence, x, y });
+    const requestId = latestTapRequest.current.next();
+    setSelection({ word, context: '', normalizedWord: preparedToken?.normalized || undefined, tokenIndex: globalIndex, x, y });
     setDefinition(null);
+    setTranslationMessage(null);
     setIsLoadingDef(true);
 
     try {
-        const def = await getWordDefinition(word, fullSentence);
-        setDefinition(def);
-    } catch (err) {
-        console.error("Dictionary Fetch Failed:", err);
+        if (!preparedToken || languageChapter?.mode !== 'prepared') {
+          if (latestTapRequest.current.isLatest(requestId)) setTranslationMessage('Bu kitap için çeviri henüz hazırlanmadı.');
+          return;
+        }
+        const resolved = await readerLanguageData.resolve(book.id, currentChapter.id, currentChapter.content, preparedToken.index);
+        if (!latestTapRequest.current.isLatest(requestId)) return;
+        if (resolved.state !== 'ready') { setTranslationMessage('Hazırlanmış çeviri verisi kullanılamıyor.'); return; }
+        setSelection(previous => previous && previous.tokenIndex === preparedToken.index ? { ...previous, word: resolved.token.text, normalizedWord: resolved.token.normalized || undefined, context: resolved.sentence?.sourceText || '', translatedContext: resolved.sentence?.translatedText } : previous);
+        if (!resolved.dictionary) { setTranslationMessage('Bu kelime için çeviri henüz kullanılamıyor.'); return; }
+        setDefinition({ word: resolved.token.text, meanings: [{ partOfSpeech: resolved.dictionary.type || 'Kelime', translation: resolved.dictionary.translation, definition: resolved.dictionary.definition || 'Hazırlanmış sözlük çevirisi', example: resolved.sentence?.sourceText || '', translatedExample: resolved.sentence?.translatedText || '' }] });
+    } catch {
+        if (latestTapRequest.current.isLatest(requestId)) setTranslationMessage('Çeviri verisi yüklenemedi. Lütfen tekrar deneyin.');
     } finally {
-        setIsLoadingDef(false);
+        if (latestTapRequest.current.isLatest(requestId)) setIsLoadingDef(false);
     }
-  };
-
-  const getSentenceContext = (text: string, word: string) => {
-    const index = text.indexOf(word);
-    if (index === -1) return "";
-    const start = Math.max(0, text.lastIndexOf('.', index) + 1);
-    let end = text.indexOf('.', index);
-    if (end === -1) end = text.length;
-    return text.slice(start, end + 1).trim();
   };
 
   const handleSave = () => {
     if (!definition || !selection) return;
     
-    const newWord: VocabularyWord = {
-      id: Date.now().toString(),
-      word: selection.word,
-      translation: definition.meanings[0].translation,
-      definition: definition.meanings[0].definition,
-      exampleSentence: selection.context,
-      type: definition.meanings[0].partOfSpeech, // Already translated in service
-      level: book.level,
-      sourceBookId: book.id,
-      nextReviewDate: new Date(),
-      strength: 0
-    };
+    const token: PreparedReaderToken = { index: selection.tokenIndex, text: selection.word, normalized: selection.normalizedWord || null, start: 0, end: selection.word.length, sentenceId: '' , isWord: true };
+    const newWord: VocabularyWord = vocabularyFromPreparedToken(book, currentChapter.id, token, { id: '', word: selection.word, normalizedWord: selection.normalizedWord || selection.word.toLowerCase(), translation: definition.meanings[0].translation, definition: definition.meanings[0].definition, type: definition.meanings[0].partOfSpeech }, selection.context ? { id: '', sourceText: selection.context, translatedText: selection.translatedContext || '', sourceHash: '', chapterContentHash: '', processingVersion: '' } : undefined);
     
     onSaveWord(newWord);
     setSelection(null); 
   };
 
-  const isSaved = (word: string) => {
-    const norm = word.toLowerCase().trim();
-    return savedWords.some(w => w.word.toLowerCase().trim() === norm);
+  const isSaved = (word: string, normalized?: string | null) => {
+    const norm = normalized || word.toLowerCase().trim();
+    return savedWords.some(w => (w.normalizedWord || w.word.toLowerCase().trim()) === norm && w.sourceBookId === book.id && w.sourceChapterId === currentChapter.id);
   };
 
   const playAudio = (text: string) => {
@@ -222,10 +228,14 @@ const BookReader: React.FC<BookReaderProps> = ({
 
           <article 
             ref={textRef} 
-            className={`leading-relaxed text-gray-800 dark:text-gray-200 ${currentFont} transition-all duration-300`}
+            className={`leading-relaxed text-gray-800 dark:text-gray-200 ${currentFont} transition-all duration-300 ${languageChapter?.mode === 'prepared' ? 'whitespace-pre-wrap' : ''}`}
             style={{ fontSize: `${fontSize}px` }}
           >
-            {paragraphs.map((paragraph, pIndex) => (
+            {languageChapter?.mode === 'prepared' ? languageChapter.tokens.map(token => {
+              const saved = token.isWord && isSaved(token.text, token.normalized); const isLastRead = token.index === lastReadWordIndex; const active = selection?.tokenIndex === token.index;
+              if (!token.isWord) return <span key={token.index}>{token.text}</span>;
+              return <span key={token.index} id={`word-${token.index}`} onClick={event => handleWordClick(token.text, token.index, event, token)} className={`cursor-pointer transition-all rounded-md px-0.5 inline-block ${saved ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-900 dark:text-yellow-100 decoration-yellow-400/50 underline decoration-2 underline-offset-4' : isLastRead ? 'text-red-600 font-black decoration-red-200 underline decoration-2 underline-offset-4' : 'hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:text-brand-600'} ${active ? 'bg-brand-600 text-white scale-110 shadow-lg px-2 rounded-lg' : ''}`}>{token.text}</span>;
+            }) : paragraphs.map((paragraph, pIndex) => (
               <p key={pIndex} className="mb-10 text-justify">
                 {tokenizeText(paragraph).map((token, index) => {
                   const isWord = /\w/.test(token);
@@ -236,7 +246,7 @@ const BookReader: React.FC<BookReaderProps> = ({
                   if (isWord) {
                      const myGlobalIndex = globalWordCounter++;
                      const isLastRead = myGlobalIndex === lastReadWordIndex;
-                     const active = selection?.word === token;
+                     const active = selection?.tokenIndex === myGlobalIndex;
 
                      wordElement = (
                         <span
@@ -309,6 +319,8 @@ const BookReader: React.FC<BookReaderProps> = ({
                   <Loader2 className="animate-spin text-brand-500 mb-3" size={32} strokeWidth={3} />
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Çevriliyor...</p>
                 </div>
+              ) : translationMessage ? (
+                <div className="py-8 text-center text-sm font-bold text-gray-500">{translationMessage}</div>
               ) : (
                 definition && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-400">
@@ -316,7 +328,7 @@ const BookReader: React.FC<BookReaderProps> = ({
                       <div key={i} className="group">
                         <div className="mt-4 mb-4">
                            <span className="text-[10px] font-black uppercase text-brand-600 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 rounded-lg mb-1 inline-block">
-                            {translatePos(meaning.partOfSpeech)}
+                            {meaning.partOfSpeech || 'Kelime'}
                           </span>
                            <div className="font-bold text-3xl text-brand-600 dark:text-brand-400 leading-tight">
                             {meaning.translation}
@@ -341,11 +353,11 @@ const BookReader: React.FC<BookReaderProps> = ({
                     <button 
                       onClick={handleSave}
                       className={`w-full mt-2 py-4 rounded-xl font-black text-base transition-all
-                        ${isSaved(selection.word) 
+                        ${isSaved(selection.word, selection.normalizedWord)
                           ? 'bg-green-50 text-green-600 shadow-inner' 
                           : 'bg-brand-600 text-white hover:bg-brand-700 shadow-xl shadow-brand-500/20 active:scale-95'}`}
                     >
-                      {isSaved(selection.word) ? (
+                      {isSaved(selection.word, selection.normalizedWord) ? (
                         <span className="flex items-center justify-center gap-2"><CheckCircle size={18} /> Kaydedildi</span>
                       ) : (
                         <span className="flex items-center justify-center gap-2"><Star size={18} /> Deftere Ekle</span>

@@ -8,7 +8,7 @@ const normalizeWord = (word: string) => word.normalize('NFKD').toLocaleLowerCase
 // A vocabulary entry is stable per language, normalized spelling, and reading
 // source. The source segment prevents one book's word from overwriting another.
 export const vocabularyDocumentId = (entry: VocabularyEntry) =>
-  `v1-en-${normalizeWord(entry.word)}-${normalizeWord(entry.sourceBookId || 'manual')}-${normalizeWord(entry.sourceChapterId || 'legacy')}`.slice(0, 512);
+  `v1-en-${normalizeWord(entry.normalizedWord || entry.word)}-${normalizeWord(entry.sourceBookId || 'manual')}-${normalizeWord(entry.sourceChapterId || 'legacy')}`.slice(0, 512);
 
 const fromEntry = (id: string, data: Record<string, unknown>): VocabularyEntry => ({
   id,
@@ -45,8 +45,9 @@ export const saveVocabularyEntry = async (uid: string, entry: VocabularyEntry): 
   if (!db) throw new Error('Firestore is unavailable.');
   const id = vocabularyDocumentId(entry);
   const ref = doc(db, 'users', uid, 'vocabulary', id);
-  await setDoc(ref, { ...entry, id, normalizedWord: normalizeWord(entry.word), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
-  return { ...entry, id, normalizedWord: normalizeWord(entry.word) };
+  const normalizedWord = entry.normalizedWord || normalizeWord(entry.word);
+  await setDoc(ref, { ...entry, id, normalizedWord, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+  return { ...entry, id, normalizedWord };
 };
 
 export const deleteVocabularyEntry = async (uid: string, entryId: string) => {

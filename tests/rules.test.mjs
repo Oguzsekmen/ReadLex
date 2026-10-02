@@ -85,6 +85,7 @@ test('books, chapters, plans, and dictionary are read-only to all browser client
     await setDoc(doc(db, 'books/book-1/chapters/chapter-1'), { title: 'Chapter' });
     await setDoc(doc(db, 'books/book-1/languageChapters/chapter-1'), { status: 'COMPLETED' });
     await setDoc(doc(db, 'books/book-1/languageChapters/chapter-1/sentences/sentence-1'), { translatedText: 'Çeviri' });
+    await setDoc(doc(db, 'books/book-1/languageChapters/chapter-1/tokenChunks/chunk-0'), { tokens: [] });
     await setDoc(doc(db, 'plans/FREE'), { name: 'Free' });
     await setDoc(doc(db, 'dictionary/word'), { word: 'fixture' });
     await setDoc(doc(db, 'bookImports/import-1'), { title: 'Private source material' });
@@ -93,6 +94,7 @@ test('books, chapters, plans, and dictionary are read-only to all browser client
   await assertSucceeds(getDoc(doc(reader, 'books/book-1')));
   await assertSucceeds(getDoc(doc(reader, 'books/book-1/chapters/chapter-1')));
   await assertSucceeds(getDoc(doc(reader, 'books/book-1/languageChapters/chapter-1/sentences/sentence-1')));
+  await assertSucceeds(getDoc(doc(reader, 'books/book-1/languageChapters/chapter-1/tokenChunks/chunk-0')));
   await assertSucceeds(getDoc(doc(reader, 'plans/FREE')));
   await assertSucceeds(getDoc(doc(reader, 'dictionary/word')));
   const browserAdmin = userDb('browser-admin', { admin: true });
@@ -101,6 +103,7 @@ test('books, chapters, plans, and dictionary are read-only to all browser client
   await assertFails(setDoc(doc(browserAdmin, 'books/book-1/chapters/forged'), { title: 'No' }));
   await assertFails(deleteDoc(doc(browserAdmin, 'books/book-1/chapters/chapter-1')));
   await assertFails(setDoc(doc(browserAdmin, 'books/book-1/languageChapters/chapter-1/sentences/forged'), { translatedText: 'Forged' }));
+  await assertFails(setDoc(doc(browserAdmin, 'books/book-1/languageChapters/chapter-1/tokenChunks/forged'), { tokens: [] }));
   await assertFails(updateDoc(doc(browserAdmin, 'plans/FREE'), { name: 'Forged' }));
   await assertFails(setDoc(doc(browserAdmin, 'plans/forged'), { name: 'Forged' }));
   await assertFails(setDoc(doc(reader, 'dictionary/forged'), { word: 'No' }));

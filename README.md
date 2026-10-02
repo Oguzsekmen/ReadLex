@@ -266,6 +266,28 @@ Run preprocessing coverage with:
 npm run test:translation
 ```
 
+## Reader prepared-translation cache
+
+BookReader now uses prepared language data only when a book is marked
+`COMPLETED` and the chapter content hash matches. It renders the persisted
+token occurrences directly, so repeated words retain their exact token index
+and sentence ID. A normal prepared-book word tap never calls Google
+Translation, Gemini, DeepL, or another runtime translation provider.
+
+The reader loads one chapter metadata document plus that chapter's token
+chunks, then prefetches only the chapter's unique dictionary IDs in Firestore
+`in` query groups of 30. It loads a sentence document lazily on first use and
+caches it; repeated taps reuse the in-memory token, dictionary, and sentence
+records. Unprepared, stale, or incomplete data leaves the book readable and
+shows a concise Turkish availability message rather than falling back to a
+paid browser translation API.
+
+Reader integration coverage:
+
+```sh
+npm run test:reader
+```
+
 Run the import coverage with:
 
 ```sh
