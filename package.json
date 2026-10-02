@@ -17,6 +17,7 @@
     "test:reader-tts": "vitest run tests/bookReaderTts.test.tsx",
     "test:read-along": "vitest run tests/readAlongPlayer.test.tsx",
     "test:srs": "vitest run tests/srs.test.ts",
+    "test:quiz": "vitest run tests/quiz.test.ts",
     "test:reviews": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/reviews.test.mjs\"",
     "test:rules": "firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/rules.test.mjs\"",
     "test:migrations": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/migrations.test.mjs\"",
@@ -25,7 +26,7 @@
     "test:storage": "firebase emulators:exec --project demo-readlex-tests --only storage \"node --test tests/storage.rules.test.mjs\"",
     "test:translation": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/translation.test.mjs\"",
     "test:emulator": "npm run test:rules && npm run test:migrations && npm run test:imports && npm run test:ocr && npm run test:storage && npm run test:translation && npm run test:reviews",
-    "test": "npm run test:compatibility && npm run test:reader && npm run test:reader-engine && npm run test:tts-sync && npm run test:tts-adapter && npm run test:react-harness && npm run test:tts-hook && npm run test:reader-tts && npm run test:read-along && npm run test:srs && npm run test:emulator"
+    "test": "npm run test:compatibility && npm run test:reader && npm run test:reader-engine && npm run test:tts-sync && npm run test:tts-adapter && npm run test:react-harness && npm run test:tts-hook && npm run test:reader-tts && npm run test:read-along && npm run test:srs && npm run test:quiz && npm run test:emulator"
   },
   "dependencies": {
     "@google/genai": "latest",
