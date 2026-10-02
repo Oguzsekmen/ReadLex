@@ -60,7 +60,17 @@ export interface Book {
     type: 'MANUAL_TEXT' | 'OCR_IMAGE' | 'OCR_PDF';
     importId?: string;
   };
-  languageProcessingStatus?: 'NOT_STARTED';
+  languageProcessingStatus?: 'NOT_STARTED' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  languageProcessingVersion?: string;
+  sourceLanguage?: string;
+  targetLanguage?: string;
+  uniqueWordsTotal?: number;
+  dictionaryHits?: number;
+  dictionaryMisses?: number;
+  wordsTranslated?: number;
+  sentencesTotal?: number;
+  sentencesTranslated?: number;
+  chaptersProcessed?: number;
 }
 
 export type BookImportStatus =

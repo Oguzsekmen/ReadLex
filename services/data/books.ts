@@ -27,7 +27,17 @@ const fromBook = (id: string, data: Record<string, unknown>, chapters?: Chapter[
         importId: typeof (data.source as Record<string, unknown>).importId === 'string' ? (data.source as Record<string, unknown>).importId as string : undefined
       }
     : undefined,
-  languageProcessingStatus: data.languageProcessingStatus === 'NOT_STARTED' ? 'NOT_STARTED' : undefined
+  languageProcessingStatus: ['NOT_STARTED', 'QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(data.languageProcessingStatus as string) ? data.languageProcessingStatus as Book['languageProcessingStatus'] : undefined,
+  languageProcessingVersion: typeof data.languageProcessingVersion === 'string' ? data.languageProcessingVersion : undefined,
+  sourceLanguage: typeof data.sourceLanguage === 'string' ? data.sourceLanguage : 'en',
+  targetLanguage: typeof data.targetLanguage === 'string' ? data.targetLanguage : 'tr',
+  uniqueWordsTotal: typeof data.uniqueWordsTotal === 'number' ? data.uniqueWordsTotal : undefined,
+  dictionaryHits: typeof data.dictionaryHits === 'number' ? data.dictionaryHits : undefined,
+  dictionaryMisses: typeof data.dictionaryMisses === 'number' ? data.dictionaryMisses : undefined,
+  wordsTranslated: typeof data.wordsTranslated === 'number' ? data.wordsTranslated : undefined,
+  sentencesTotal: typeof data.sentencesTotal === 'number' ? data.sentencesTotal : undefined,
+  sentencesTranslated: typeof data.sentencesTranslated === 'number' ? data.sentencesTranslated : undefined,
+  chaptersProcessed: typeof data.chaptersProcessed === 'number' ? data.chaptersProcessed : undefined
 });
 
 export const getBookMetadata = async (bookId: string): Promise<Book | undefined> => {

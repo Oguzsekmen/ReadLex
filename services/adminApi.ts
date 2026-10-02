@@ -24,8 +24,20 @@ export const adminApi = {
   createPlan: (plan: PlanConfig) => callable('createPlan', plan),
   updatePlan: (plan: PlanConfig) => callable('updatePlan', plan),
   deletePlan: (id: string) => callable('deletePlan', { id }),
+  getLanguagePreflight: (id: string) => callable<{ id: string }, { preflight: LanguageProcessingSummary }>('getBookLanguageProcessingPreflight', { id }),
+  getLanguageStatus: (id: string) => callable<{ id: string }, { status: LanguageProcessingSummary }>('getBookLanguageProcessingStatus', { id }),
+  startLanguageProcessing: (id: string) => callable<{ id: string }, { status: LanguageProcessingSummary }>('startBookLanguageProcessing', { id }),
+  retryLanguageProcessing: (id: string) => callable<{ id: string }, { status: LanguageProcessingSummary }>('retryBookLanguageProcessing', { id }),
   listUsers: () => callable<Record<string, never>, { users: AdminUserSummary[] }>('listUsers', {})
 };
+
+export interface LanguageProcessingSummary {
+  bookId: string;
+  languageProcessingStatus?: Book['languageProcessingStatus'];
+  sourceLanguage?: string; targetLanguage?: string; chapterCount?: number; sourceCharacters?: number;
+  uniqueWordsTotal: number; dictionaryHits: number; dictionaryMisses: number; wordsTranslated?: number;
+  sentencesTotal: number; sentencesTranslated?: number; chaptersProcessed?: number; languageProcessingErrorMessage?: string;
+}
 
 export const getAdminApiErrorMessage = (error: unknown) => {
   const code = (error as { code?: string } | undefined)?.code || '';

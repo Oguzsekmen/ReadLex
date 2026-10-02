@@ -220,6 +220,8 @@ export const publishImport = async (id: string) => adminDb.runTransaction(async 
     chapterMigrationState: 'MIGRATED',
     source: { type: data.sourceType === 'PDF' ? 'OCR_PDF' : data.sourceType === 'IMAGE' ? 'OCR_IMAGE' : 'MANUAL_TEXT', importId: id },
     languageProcessingStatus: 'NOT_STARTED',
+    sourceLanguage: 'en',
+    targetLanguage: 'tr',
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()
   });

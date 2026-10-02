@@ -19,6 +19,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const [users, setUsersList] = useState<User[]>([]);
   const [plans, setPlansList] = useState<PlanConfig[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [processingBookId, setProcessingBookId] = useState<string | null>(null);
   
   // Search State
   const [userSearchTerm, setUserSearchTerm] = useState('');
@@ -247,6 +248,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       } catch (error) {
         alert(getAdminApiErrorMessage(error));
       }
+    }
+  };
+
+  const handlePrepareTranslations = async (book: Book) => {
+    setProcessingBookId(book.id);
+    try {
+      const { preflight } = await adminApi.getLanguagePreflight(book.id);
+      const summary = `${preflight.uniqueWordsTotal} unique words\n${preflight.dictionaryHits} dictionary hits\n${preflight.dictionaryMisses} new word translations\n${preflight.sentencesTotal} sentence translations\n${preflight.sourceCharacters?.toLocaleString()} source characters`;
+      if (!confirm(`Prepare English → Turkish translations?\n\n${summary}`)) return;
+      const result = book.languageProcessingStatus === 'FAILED'
+        ? await adminApi.retryLanguageProcessing(book.id)
+        : await adminApi.startLanguageProcessing(book.id);
+      alert(`Translation preparation: ${result.status.languageProcessingStatus}`);
+      await refreshData();
+    } catch (error) {
+      alert(getAdminApiErrorMessage(error));
+    } finally {
+      setProcessingBookId(null);
     }
   };
 
@@ -520,6 +539,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                      <th className="p-3">Chapters</th>
                      <th className="p-3">Access</th>
                      <th className="p-3">Status</th>
+                     <th className="p-3">Translations</th>
                      <th className="p-3">{t('actions', lang)}</th>
                    </tr>
                 </thead>
@@ -540,6 +560,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                       </td>
                       <td className="p-3">
                         {b.archived ? <span className="text-red-500 font-bold text-xs flex items-center"><Archive size={12} className="mr-1"/> Archived</span> : <span className="text-green-500 font-bold text-xs">Active</span>}
+                      </td>
+                      <td className="p-3 min-w-48">
+                        <div className="text-xs font-bold dark:text-white">{b.languageProcessingStatus || 'NOT_STARTED'}</div>
+                        {b.languageProcessingStatus === 'COMPLETED' && <div className="text-xs text-gray-500">{b.wordsTranslated || 0} new words · {b.sentencesTranslated || 0} sentences</div>}
+                        {b.languageProcessingStatus === 'FAILED' && <div className="text-xs text-red-600">Preparation failed; retry is safe.</div>}
+                        <button disabled={processingBookId === b.id || b.languageProcessingStatus === 'PROCESSING' || b.languageProcessingStatus === 'QUEUED'} onClick={() => void handlePrepareTranslations(b)} className="mt-2 px-2 py-1 rounded bg-indigo-600 text-white text-xs font-bold disabled:opacity-50">
+                          {processingBookId === b.id ? 'Preparing…' : b.languageProcessingStatus === 'FAILED' ? 'Retry translations' : 'Prepare translations'}
+                        </button>
                       </td>
                       <td className="p-3 flex gap-2">
                         <button onClick={() => handleEditBook(b)} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit size={16} /></button>

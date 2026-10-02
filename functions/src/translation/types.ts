@@ -1,0 +1,10 @@
+export type LanguageProcessingStatus = 'NOT_STARTED' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export type LanguagePair = { sourceLanguage: string; targetLanguage: string };
+export type PreparedToken = { index: number; text: string; normalized: string | null; start: number; end: number; sentenceId: string; isWord: boolean };
+export type PreparedSentence = { id: string; chapterId: string; order: number; sourceText: string; sourceStart: number; sourceEnd: number; sourceHash: string; tokenStartIndex: number; tokenEndIndex: number };
+export type TranslationProvider = { readonly providerName: string; readonly providerVersion: string; translateTexts(texts: string[], pair: LanguagePair): Promise<string[]> };
+export const LANGUAGE_PROCESSING_VERSION = 'language-preprocessing-v1';
+export const TOKEN_CHUNK_SIZE = 300;
+export const TRANSLATION_BATCH_MAX_ITEMS = 100;
+export const TRANSLATION_BATCH_MAX_CHARS = 4_000;
+export const MAX_BOOK_PROCESSING_CHARS = 120_000;

@@ -218,6 +218,54 @@ bounded hybrid job (at most 20 images or one 25 MB PDF) and persists status and
 page progress for polling. For very large documents, move the existing provider
 service boundary to Cloud Tasks/Cloud Run before raising these limits.
 
+## Translation preprocessing
+
+Translation preparation is explicitly started by an administrator from the
+Books panel; publishing a book only sets `languageProcessingStatus` to
+`NOT_STARTED`. This prevents an accidental book update from spending provider
+quota. The current supported pair is `en → tr`, stored on the book as
+`sourceLanguage` and `targetLanguage` so additional pairs can be added without
+changing document identity.
+
+The Functions-only translation adapter uses Google Cloud Translation v3 and
+Application Default Credentials. It segments English prose, stores every token
+occurrence with exact offsets and sentence IDs, reuses language-pair-aware
+global `dictionary/{deterministicId}` entries, translates only cache misses in
+bounded batches, and writes book-specific data below:
+
+- `books/{bookId}/languageChapters/{chapterId}` — chapter hash and token-chunk metadata
+- `books/{bookId}/languageChapters/{chapterId}/tokenChunks/{chunkId}` — bounded token arrays
+- `books/{bookId}/languageChapters/{chapterId}/sentences/{sentenceId}` — source and contextual translation
+
+Sentence and chapter hashes prevent stale prepared data from being considered
+current after a chapter edit. The edit marks the book `NOT_STARTED`; global
+dictionary entries are intentionally retained. Completed dictionary batches and
+sentence records act as retry checkpoints, so a retry avoids translating work
+that was successfully persisted before a provider failure.
+
+### Owner setup for translation
+
+1. Enable the **Cloud Translation API** in the same Google Cloud project.
+2. Grant the Cloud Functions runtime service account permission to call Cloud
+   Translation (and retain its Firestore access).
+3. Deploy Functions and Firestore Rules after enabling the API:
+
+```sh
+firebase deploy --only functions,firestore:rules
+```
+
+`TRANSLATION_PROVIDER=google-translation` is the default server setting. Never
+add a Translation API key or credentials to `VITE_*`, source control, or the
+browser. Automated tests use a fake provider only. An owner may manually smoke
+test a tiny, non-copyrighted fixture through the Admin Books preparation action
+after configuring Cloud Translation; no live provider call runs in CI.
+
+Run preprocessing coverage with:
+
+```sh
+npm run test:translation
+```
+
 Run the import coverage with:
 
 ```sh

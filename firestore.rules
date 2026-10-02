@@ -72,6 +72,23 @@ service cloud.firestore {
         allow read: if signedIn();
         allow write: if false;
       }
+
+      // Prepared language data is produced exclusively by trusted Functions.
+      // Readers may consume it in a later phase but can never mutate it.
+      match /languageChapters/{chapterId} {
+        allow read: if signedIn();
+        allow write: if false;
+
+        match /sentences/{sentenceId} {
+          allow read: if signedIn();
+          allow write: if false;
+        }
+
+        match /tokenChunks/{chunkId} {
+          allow read: if signedIn();
+          allow write: if false;
+        }
+      }
     }
 
     match /plans/{planId} {

@@ -5,6 +5,7 @@ import { adminAuth, adminDb } from './admin';
 import { requireAdmin } from './middleware/authorization';
 import { resourceId, validateBook, validatePlan } from './utils/validation';
 import { cancelImport, createImport, getImport, listImports, processOcrImport, processTextImport, publishImport, registerImportSourceFiles, updateImportChapters, updateImportMetadata } from './imports/service';
+import { getBookLanguagePreflight, getBookLanguageProcessingStatus as getLanguageStatus, startBookLanguageProcessing as runLanguageProcessing } from './translation/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -16,8 +17,12 @@ const totalWords = (chapters: Array<{ content: string }>) =>
 
 const writeBook = async (id: string, book: ReturnType<typeof validateBook>, creating: boolean) => {
   const ref = adminDb.collection('books').doc(id);
-  const existingChapters = creating ? undefined : await ref.collection('chapters').get();
+  const [, existingChapters] = creating ? [undefined, undefined] : await Promise.all([ref.get(), ref.collection('chapters').get()]);
   const nextChapterIds = new Set(book.chapters.map(chapter => chapter.id));
+  const contentChanged = !creating && (() => {
+    const current = new Map((existingChapters?.docs || []).map(chapter => [chapter.id, chapter.data().content]));
+    return current.size !== book.chapters.length || book.chapters.some(chapter => current.get(chapter.id) !== chapter.content);
+  })();
   const batch = adminDb.batch();
   const metadata = {
     id,
@@ -31,9 +36,10 @@ const writeBook = async (id: string, book: ReturnType<typeof validateBook>, crea
     archived: book.archived,
     chapterCount: book.chapters.length,
     chapterMigrationState: 'MIGRATED',
+    ...(contentChanged ? { languageProcessingStatus: 'NOT_STARTED', languageProcessingOperationId: FieldValue.delete(), languageProcessingErrorCode: FieldValue.delete(), languageProcessingErrorMessage: FieldValue.delete() } : {}),
     updatedAt: FieldValue.serverTimestamp()
   };
-  if (creating) batch.create(ref, { ...metadata, createdAt: FieldValue.serverTimestamp() });
+  if (creating) batch.create(ref, { ...metadata, sourceLanguage: 'en', targetLanguage: 'tr', languageProcessingStatus: 'NOT_STARTED', createdAt: FieldValue.serverTimestamp() });
   else batch.set(ref, metadata, { merge: true });
   for (const [order, chapter] of book.chapters.entries()) {
     batch.set(ref.collection('chapters').doc(chapter.id), {
@@ -219,4 +225,24 @@ export const publishBookImport = onCall(async (request) => {
   const published = await publishImport(id);
   audit('publishBookImport', uid, id, 'success');
   return published;
+});
+
+export const getBookLanguageProcessingPreflight = onCall(async (request) => {
+  const { uid } = requireAdmin(request); const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const preflight = await getBookLanguagePreflight(id); audit('getBookLanguageProcessingPreflight', uid, id, 'success'); return { preflight };
+});
+
+export const getBookLanguageProcessingStatus = onCall(async (request) => {
+  const { uid } = requireAdmin(request); const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const status = await getLanguageStatus(id); audit('getBookLanguageProcessingStatus', uid, id, 'success'); return { status };
+});
+
+export const startBookLanguageProcessing = onCall({ timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
+  const { uid } = requireAdmin(request); const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const status = await runLanguageProcessing(id); audit('startBookLanguageProcessing', uid, id, 'success'); return { status };
+});
+
+export const retryBookLanguageProcessing = onCall({ timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
+  const { uid } = requireAdmin(request); const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const status = await runLanguageProcessing(id, undefined, true); audit('retryBookLanguageProcessing', uid, id, 'success'); return { status };
 });
