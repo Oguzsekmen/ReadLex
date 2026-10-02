@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus, Chapter } from '../types';
-import { getBooks, saveBook, deleteBook, getUsers, saveUser, deleteUser, getPlans, savePlans } from '../services/storage';
+import { getBooks, getPlans } from '../services/storage';
+import { adminApi, getAdminApiErrorMessage } from '../services/adminApi';
 import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight, Clock } from 'lucide-react';
 import { t } from '../services/i18n';
 
@@ -26,6 +27,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const [currentBook, setCurrentBook] = useState<Partial<Book>>({});
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
 
+  // Firebase Auth identities and entitlements are intentionally read-only in
+  // this phase. Dedicated server workflows will be added later if needed.
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [targetUser, setTargetUser] = useState<Partial<User>>({});
 
@@ -63,11 +66,33 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
 
   const refreshData = async () => {
     setIsLoading(true);
-    const [b, u, p] = await Promise.all([getBooks(), getUsers(), getPlans()]);
-    setBooks(b);
-    setUsersList(u);
-    setPlansList(p);
-    setIsLoading(false);
+    try {
+      const [b, userResult, p] = await Promise.all([getBooks(), adminApi.listUsers(), getPlans()]);
+      setBooks(b);
+      // Firebase Auth is authoritative for the administrator user list. Do not
+      // expose profile, entitlement, or identity mutation controls here.
+      setUsersList(userResult.users.map(summary => ({
+        id: summary.id,
+        email: summary.email || '',
+        name: summary.name || 'ReadLex User',
+        avatarUrl: '',
+        languagePreference: currentUser.languagePreference,
+        role: summary.isAdmin ? 'ADMIN' : 'USER',
+        streak: 0,
+        xp: 0,
+        dailyGoal: 0,
+        lastVisitDate: 0,
+        subscriptionStatus: summary.disabled ? 'EXPIRED' : 'ACTIVE',
+        plan: '—',
+        trialEndsAt: 0,
+        emailVerified: summary.emailVerified
+      })));
+      setPlansList(p);
+    } catch (error) {
+      alert(getAdminApiErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // --- Book Handlers ---
@@ -188,80 +213,48 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       archived: currentBook.archived || false
     };
 
-    await saveBook(bookToSave);
-    setIsEditingBook(false);
-    refreshData();
+    try {
+      if (currentBook.id) await adminApi.updateBook(bookToSave);
+      else {
+        const { id, totalWords: _totalWords, ...newBook } = bookToSave;
+        void id;
+        await adminApi.createBook(newBook);
+      }
+      setIsEditingBook(false);
+      refreshData();
+    } catch (error) {
+      alert(getAdminApiErrorMessage(error));
+    }
   };
 
   const handleArchiveBook = async (book: Book) => {
     const updatedBook = { ...book, archived: !book.archived };
-    await saveBook(updatedBook);
-    refreshData();
+    try {
+      await adminApi.archiveBook(updatedBook.id, updatedBook.archived);
+      refreshData();
+    } catch (error) {
+      alert(getAdminApiErrorMessage(error));
+    }
   };
 
   const handleDeleteBook = async (id: string) => {
     if (confirm(t('confirmDelete', currentUser.languagePreference))) {
-      await deleteBook(id);
-      refreshData();
+      try {
+        await adminApi.deleteBook(id);
+        refreshData();
+      } catch (error) {
+        alert(getAdminApiErrorMessage(error));
+      }
     }
   };
 
-  // --- User Handlers ---
-  const handleEditUser = (u?: User) => {
-    setTargetUser(u || {
-      id: '', name: '', email: '', role: 'USER', plan: 'FREE', subscriptionStatus: 'ACTIVE'
-    });
-    setIsEditingUser(true);
+  const userManagementUnavailable = () => {
+    alert('Kullanıcı kimliği, rolü ve abonelik yönetimi bu panelden kullanılamaz.');
   };
 
-  const handleSaveUser = async () => {
-    if (!targetUser.email || !targetUser.name) return alert(t('fillAllFields', currentUser.languagePreference));
-    
-    // Simple email check for new users
-    if (!targetUser.id) {
-       const exists = users.find(u => u.email === targetUser.email);
-       if(exists) return alert(t('emailExists', currentUser.languagePreference));
-    }
-
-    // Determine end date based on plan
-    let endAt = targetUser.subscriptionEndsAt || Date.now();
-    if (targetUser.plan !== 'FREE') {
-       const planConfig = plans.find(p => p.id === targetUser.plan);
-       if (planConfig) {
-         endAt = Date.now() + (planConfig.durationDays * 24 * 60 * 60 * 1000);
-       }
-    }
-
-    const userToSave: User = {
-      id: targetUser.id || 'u-' + Date.now(),
-      email: targetUser.email!,
-      name: targetUser.name!,
-      // Roles are server-managed in Phase 1B; this legacy browser panel cannot
-      // create or grant privileged users.
-      role: 'USER',
-      languagePreference: targetUser.languagePreference || 'TR',
-      streak: targetUser.streak || 0,
-      xp: targetUser.xp || 0,
-      dailyGoal: targetUser.dailyGoal || 25,
-      lastVisitDate: targetUser.lastVisitDate || Date.now(),
-      subscriptionStatus: targetUser.subscriptionStatus || 'ACTIVE',
-      plan: targetUser.plan || 'FREE',
-      trialEndsAt: targetUser.trialEndsAt || 0,
-      subscriptionEndsAt: endAt
-    };
-
-    await saveUser(userToSave);
-    setIsEditingUser(false);
-    refreshData();
-  };
-
-  const handleDeleteUser = async (id: string) => {
-    if (id === currentUser.id) return alert("You cannot delete yourself.");
-    if (confirm(t('confirmDelete', currentUser.languagePreference))) {
-      await deleteUser(id);
-      refreshData();
-    }
-  };
+  const handleEditUser = (_user?: User) => userManagementUnavailable();
+  const handleSaveUser = () => userManagementUnavailable();
+  const handleDeleteUser = (_id: string) => userManagementUnavailable();
 
   // --- Plan Handlers ---
   const handleEditPlan = (p?: PlanConfig) => {
@@ -278,8 +271,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const handleDeletePlan = async (id: string) => {
       if (confirm("Are you sure you want to delete this plan?")) {
           const updatedPlans = plans.filter(p => p.id !== id);
-          await savePlans(updatedPlans);
-          refreshData();
+          try {
+            await adminApi.deletePlan(id);
+            refreshData();
+          } catch (error) {
+            alert(getAdminApiErrorMessage(error));
+          }
       }
   };
 
@@ -298,20 +295,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
         features: featuresArray
     };
 
-    // Since Firebase update logic for plans is bulk in current storage.ts implementation for simplicity
-    // We update the local array then save all
-    let updatedPlans = [...plans];
-    const index = updatedPlans.findIndex(p => p.id === planId);
-    
-    if (index >= 0) {
-        updatedPlans[index] = newPlanConfig;
-    } else {
-        updatedPlans.push(newPlanConfig);
+    try {
+      if (targetPlan.id) await adminApi.updatePlan(newPlanConfig);
+      else await adminApi.createPlan(newPlanConfig);
+      setIsEditingPlan(false);
+      refreshData();
+    } catch (error) {
+      alert(getAdminApiErrorMessage(error));
     }
-
-    await savePlans(updatedPlans);
-    setIsEditingPlan(false);
-    refreshData();
   };
 
   const lang = currentUser.languagePreference;
@@ -574,9 +565,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                         className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-900 dark:border-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-brand-500"
                     />
                 </div>
-                <button onClick={() => handleEditUser()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center whitespace-nowrap">
-                  <Plus size={18} className="mr-2" /> {t('addUser', lang)}
-                </button>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 self-center">Kullanıcı kimliği ve abonelik düzenlemeleri sunucu iş akışı gerektirir.</span>
             </div>
           </div>
 
@@ -662,12 +651,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                                 <span className="text-red-500 font-bold text-xs bg-red-50 px-2 py-1 rounded">Expired</span>
                             )}
                         </td>
-                        <td className="p-3 flex gap-2">
-                          <button onClick={() => handleEditUser(u)} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit size={16} /></button>
-                          {u.role !== 'ADMIN' && (
-                             <button onClick={() => handleDeleteUser(u.id)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>
-                          )}
-                        </td>
+                        <td className="p-3 text-xs font-bold text-gray-400">Read-only</td>
                       </tr>
                     );
                   })}

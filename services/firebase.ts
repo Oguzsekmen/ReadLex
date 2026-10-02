@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { getFunctions, Functions } from 'firebase/functions';
 import { getAnalytics, Analytics } from 'firebase/analytics';
 
 // Firebase web configuration is intentionally browser-visible. It is not a
@@ -22,6 +23,7 @@ let db: Firestore | undefined;
 let auth: Auth | undefined;
 let googleProvider: GoogleAuthProvider | undefined;
 let analytics: Analytics | undefined;
+let functions: Functions | undefined;
 let initializationError: string | null = null;
 
 try {
@@ -77,6 +79,13 @@ try {
                 console.warn("Firebase Auth init failed:", authError);
                 if (!initializationError) initializationError = authError.message || "Auth init failed";
             }
+
+            try {
+                functions = getFunctions(app, 'europe-west1');
+            } catch (functionsError: any) {
+                console.warn("Firebase Functions init failed:", functionsError);
+                if (!initializationError) initializationError = functionsError.message || "Functions init failed";
+            }
         }
     }
 } catch (e: any) {
@@ -84,4 +93,4 @@ try {
     initializationError = e.message;
 }
 
-export { db, auth, googleProvider, analytics, initializationError };
+export { db, auth, googleProvider, analytics, functions, initializationError };

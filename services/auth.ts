@@ -59,6 +59,15 @@ export const getAuthenticatedProfile = async (firebaseUser: FirebaseUser): Promi
   };
 };
 
+// Call after an owner assigns a custom claim; this intentionally forces a
+// single token refresh rather than refreshing tokens during normal rendering.
+export const refreshAuthenticatedProfile = async (): Promise<User> => {
+  const firebaseUser = requireAuth().currentUser;
+  if (!firebaseUser) throw new Error('auth/no-current-user');
+  await firebaseUser.getIdTokenResult(true);
+  return getAuthenticatedProfile(firebaseUser);
+};
+
 export const observeAuthState = (listener: (firebaseUser: FirebaseUser | null) => void) => {
   if (!auth) {
     queueMicrotask(() => listener(null));

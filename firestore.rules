@@ -2,6 +2,9 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Privileged book, plan, and identity mutations run through Cloud
+    // Functions with the Admin SDK. Browser clients never receive direct
+    // administrative write access, including clients with an admin claim.
     function signedIn() {
       return request.auth != null;
     }
@@ -10,8 +13,8 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // Reserved for a future privileged Admin SDK/Functions claim assignment.
-    // No rule below grants writes based on this claim in this phase.
+    // Reserved for server-side authorization. No client write rule relies on
+    // this claim; the Admin SDK bypasses these rules in trusted Functions.
     function hasAdminClaim() {
       return signedIn() && request.auth.token.admin == true;
     }

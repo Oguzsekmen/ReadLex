@@ -66,3 +66,46 @@ secret store.
 The included Firestore Rules allow authenticated reads of books/plans, own UID
 profile/vocabulary/progress access, safe profile-field updates only, and deny
 global dictionary-cache and all administrative writes.
+
+## Trusted admin backend
+
+Privileged book and plan writes use callable Firebase Functions in
+`functions/`. These functions initialize Firebase Admin SDK only on the server,
+require an authenticated caller with the ID-token custom claim `admin: true`,
+validate payloads, and write through the Admin SDK. Browser Firestore Rules
+remain closed to every administrative write, even for an admin-claim client.
+
+### Bootstrap the first administrator
+
+There is deliberately no public function that grants administrator access.
+From a project-owner workstation with Application Default Credentials for the
+correct Firebase project, run:
+
+```sh
+cd functions
+npm install
+npm run admin:set-claim -- FIREBASE_AUTH_UID
+```
+
+For local owner scripts, use `gcloud auth application-default login` or point
+`GOOGLE_APPLICATION_CREDENTIALS` at an owner-controlled service-account file
+that stays outside this repository. The affected user must sign out/in or call
+the client token-refresh utility before the `admin: true` claim appears.
+
+### Local development and deployment
+
+Install the Firebase CLI and configure the project outside source control.
+Then use:
+
+```sh
+cd functions
+npm install
+npm run build
+cd ..
+firebase emulators:start
+firebase deploy --only functions,firestore:rules
+```
+
+The emulator UI is configured on port 4000, Functions on 5001, and Firestore
+on 8080. Deployment is intentionally manual; this repository contains no
+service-account JSON or deploy credentials.
