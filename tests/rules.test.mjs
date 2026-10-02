@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { after, before, beforeEach, test } from 'node:test';
-import { clearFirestoreData, initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
+import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 const projectId = 'demo-readlex-tests';
@@ -25,7 +25,7 @@ before(async () => {
   });
 });
 
-beforeEach(async () => clearFirestoreData({ projectId, host, port }));
+beforeEach(async () => testEnv.clearFirestore());
 after(async () => testEnv.cleanup());
 
 test('profiles allow only safe own creation and updates', async () => {

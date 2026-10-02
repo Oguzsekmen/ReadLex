@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { after, before, beforeEach, test } from 'node:test';
-import { clearFirestoreData, initializeTestEnvironment } from '@firebase/rules-unit-testing';
+import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 
 const execFileAsync = promisify(execFile);
 const projectId = 'demo-readlex-tests';
@@ -22,7 +22,7 @@ before(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Migration tests require FIRESTORE_EMULATOR_HOST. Use npm run test:migrations.');
   testEnv = await initializeTestEnvironment({ projectId, firestore: { host, port } });
 });
-beforeEach(async () => clearFirestoreData({ projectId, host, port }));
+beforeEach(async () => testEnv.clearFirestore());
 after(async () => testEnv.cleanup());
 
 test('Admin SDK writes through the trusted emulator boundary', async () => {
