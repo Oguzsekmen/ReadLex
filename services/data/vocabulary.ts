@@ -1,6 +1,7 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc } from 'firebase/firestore';
 import { VocabularyEntry } from '../../types';
 import { db } from '../firebase';
+import { mergeVocabularyEntries, migrationIsComplete, toDate } from './compatibility';
 
 const normalizeWord = (word: string) => word.normalize('NFKD').toLocaleLowerCase('en-US').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'word';
 
@@ -19,18 +20,25 @@ const fromEntry = (id: string, data: Record<string, unknown>): VocabularyEntry =
   level: (typeof data.level === 'string' ? data.level : 'A1') as VocabularyEntry['level'],
   sourceBookId: typeof data.sourceBookId === 'string' ? data.sourceBookId : '',
   sourceChapterId: typeof data.sourceChapterId === 'string' ? data.sourceChapterId : undefined,
-  nextReviewDate: new Date(),
+  nextReviewDate: toDate(data.nextReviewDate),
   strength: typeof data.strength === 'number' ? data.strength : 0,
   normalizedWord: typeof data.normalizedWord === 'string' ? data.normalizedWord : normalizeWord(typeof data.word === 'string' ? data.word : '')
 });
 
 export const getVocabularyEntries = async (uid: string): Promise<VocabularyEntry[]> => {
   if (!db) return [];
-  const entries = await getDocs(query(collection(db, 'users', uid, 'vocabulary'), limit(500)));
-  if (!entries.empty) return entries.docs.map(entry => fromEntry(entry.id, entry.data() as Record<string, unknown>));
+  const [entries, migration] = await Promise.all([
+    getDocs(query(collection(db, 'users', uid, 'vocabulary'))),
+    getDoc(doc(db, 'users', uid, 'migrationState', 'data'))
+  ]);
+  const current = entries.docs.map(entry => fromEntry(entry.id, entry.data() as Record<string, unknown>));
+  if (migrationIsComplete(migration.data() as Record<string, unknown> | undefined, 'vocabulary')) return current;
   const legacy = await getDoc(doc(db, 'vocabulary', uid));
   const words = legacy.data()?.words;
-  return Array.isArray(words) ? words.map((word, index) => fromEntry(typeof word?.id === 'string' ? word.id : `legacy-${index}`, word as Record<string, unknown>)) : [];
+  const legacyEntries = Array.isArray(words)
+    ? words.map((word, index) => fromEntry(typeof word?.id === 'string' ? word.id : `legacy-${index}`, word as Record<string, unknown>))
+    : [];
+  return mergeVocabularyEntries(current, legacyEntries);
 };
 
 export const saveVocabularyEntry = async (uid: string, entry: VocabularyEntry): Promise<VocabularyEntry> => {

@@ -29,6 +29,7 @@ const writeBook = async (id: string, book: ReturnType<typeof validateBook>, crea
     requiredPlan: book.requiredPlan,
     archived: book.archived,
     chapterCount: book.chapters.length,
+    chapterMigrationState: 'MIGRATED',
     updatedAt: FieldValue.serverTimestamp()
   };
   if (creating) batch.create(ref, { ...metadata, createdAt: FieldValue.serverTimestamp() });

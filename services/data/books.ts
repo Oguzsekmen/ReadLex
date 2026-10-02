@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { Book, Chapter } from '../../types';
 import { db } from '../firebase';
+import { shouldUseChapterDocuments } from './compatibility';
 
 const fromChapter = (id: string, data: Record<string, unknown>): Chapter => ({
   id,
@@ -33,14 +34,14 @@ export const getBookWithChapters = async (bookId: string): Promise<Book | undefi
   const bookSnapshot = await getDoc(doc(db, 'books', bookId));
   if (!bookSnapshot.exists()) return undefined;
   const metadata = bookSnapshot.data() as Record<string, unknown>;
-  const chaptersSnapshot = await getDocs(query(collection(bookSnapshot.ref, 'chapters'), orderBy('order'), limit(250)));
+  const chaptersSnapshot = await getDocs(query(collection(bookSnapshot.ref, 'chapters'), orderBy('order')));
   const chapters = chaptersSnapshot.docs.map(chapter => fromChapter(chapter.id, chapter.data() as Record<string, unknown>));
-  // Legacy books retain their embedded array until an owner-run migration has
-  // copied it. New chapter documents always take precedence when present.
+  // During an incomplete copy, the legacy array remains authoritative. A
+  // completed migration explicitly switches reads to chapter documents.
   const legacyChapters = Array.isArray(metadata.chapters)
     ? metadata.chapters.map((chapter, index) => fromChapter(`legacy-${index}`, chapter as Record<string, unknown>))
     : [];
-  return fromBook(bookSnapshot.id, metadata, chapters.length ? chapters : legacyChapters);
+  return fromBook(bookSnapshot.id, metadata, shouldUseChapterDocuments(metadata) ? chapters : legacyChapters);
 };
 
 export const getBookList = async (): Promise<Book[]> => {

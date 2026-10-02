@@ -6,6 +6,11 @@ const migrationVersion = '2a-scalable-model';
 
 const wordCount = (content: string) => content.trim().split(/\s+/).filter(Boolean).length;
 const chunks = <T>(items: T[], size = 400) => Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+const normalizeWord = (value: unknown) => typeof value === 'string'
+  ? value.normalize('NFKD').toLocaleLowerCase('en-US').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'word'
+  : 'word';
+const vocabularyDocumentId = (word: Record<string, unknown>) =>
+  `v1-en-${normalizeWord(word.word)}-${normalizeWord(word.sourceBookId || 'manual')}-${normalizeWord(word.sourceChapterId || 'legacy')}`.slice(0, 512);
 
 const migrateBooks = async () => {
   const metadataRef = adminDb.collection('migrationMetadata').doc('books');
@@ -21,6 +26,7 @@ const migrateBooks = async () => {
     for (const book of books.docs) {
       const chapters = book.data().chapters;
       if (Array.isArray(chapters) && chapters.length) {
+        await book.ref.set({ chapterMigrationState: 'MIGRATING', migrationVersion, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         for (const [chunkIndex, chapterChunk] of chunks(chapters).entries()) {
           const batch = adminDb.batch();
           chapterChunk.forEach((chapter: Record<string, unknown>, offset: number) => {
@@ -38,9 +44,9 @@ const migrateBooks = async () => {
               updatedAt: FieldValue.serverTimestamp()
             }, { merge: true });
           });
-          if (chunkIndex === 0) batch.set(book.ref, { chapterCount: chapters.length, migrationVersion, migratedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
           await batch.commit();
         }
+        await book.ref.set({ chapterCount: chapters.length, chapterMigrationState: 'MIGRATED', migrationVersion, migratedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         console.info(JSON.stringify({ operation: 'migrateBooks', bookId: book.id, result: 'copied' }));
       }
       lastBookId = book.id;
@@ -55,16 +61,20 @@ const migrateVocabulary = async (userId: string) => {
   const legacy = await adminDb.collection('vocabulary').doc(userId).get();
   const words = legacy.data()?.words;
   if (!Array.isArray(words)) return;
-  for (const [chunkIndex, wordChunk] of chunks(words).entries()) {
+  const normalizedWords = Array.from(new Map(words.map((word: Record<string, unknown>) => {
+    const id = vocabularyDocumentId(word);
+    return [id, { ...word, id }];
+  })).values());
+  for (const wordChunk of chunks(normalizedWords)) {
     const batch = adminDb.batch();
-    wordChunk.forEach((word: Record<string, unknown>, offset: number) => {
-      const index = chunkIndex * 400 + offset;
-      const id = typeof word.id === 'string' ? `legacy-${word.id}` : `legacy-${index}`;
-      batch.set(adminDb.collection('users').doc(userId).collection('vocabulary').doc(id), { ...word, id, migrationVersion, migratedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    wordChunk.forEach((word: Record<string, unknown>) => {
+      const id = word.id as string;
+      batch.set(adminDb.collection('users').doc(userId).collection('vocabulary').doc(id), { ...word, normalizedWord: normalizeWord(word.word), migrationVersion, migratedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     });
     await batch.commit();
   }
   await adminDb.collection('migrationMetadata').doc(`vocabulary-${userId}`).set({ migrationVersion, userId, completedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await adminDb.collection('users').doc(userId).collection('migrationState').doc('data').set({ vocabularyMigrationState: 'MIGRATED', vocabularyMigrationVersion: migrationVersion, vocabularyMigrationCompletedAt: FieldValue.serverTimestamp() }, { merge: true });
   console.info(JSON.stringify({ operation: 'migrateVocabulary', uid: userId, result: 'copied' }));
 };
 
@@ -83,6 +93,7 @@ const migrateProgress = async (userId: string) => {
     await batch.commit();
   }
   await adminDb.collection('migrationMetadata').doc(`progress-${userId}`).set({ migrationVersion, userId, completedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await adminDb.collection('users').doc(userId).collection('migrationState').doc('data').set({ progressMigrationState: 'MIGRATED', progressMigrationVersion: migrationVersion, progressMigrationCompletedAt: FieldValue.serverTimestamp() }, { merge: true });
   console.info(JSON.stringify({ operation: 'migrateProgress', uid: userId, result: 'copied' }));
 };
 

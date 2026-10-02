@@ -1,6 +1,7 @@
-import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc } from 'firebase/firestore';
 import { BookStatus, UserBookProgress } from '../../types';
 import { db } from '../firebase';
+import { mergeProgressEntries, migrationIsComplete, toDate } from './compatibility';
 
 const fromProgress = (id: string, data: Record<string, unknown>): UserBookProgress => ({
   bookId: typeof data.bookId === 'string' ? data.bookId : id,
@@ -9,7 +10,7 @@ const fromProgress = (id: string, data: Record<string, unknown>): UserBookProgre
   currentChapterId: typeof data.currentChapterId === 'string' ? data.currentChapterId : undefined,
   lastWordIndex: typeof data.lastWordIndex === 'number' ? data.lastWordIndex : 0,
   progressPercent: typeof data.progressPercent === 'number' ? data.progressPercent : undefined,
-  lastReadAt: new Date()
+  lastReadAt: toDate(data.lastReadAt)
 });
 
 const normalizeLegacyProgress = (data: unknown): Record<string, UserBookProgress> => {
@@ -25,10 +26,14 @@ const normalizeLegacyProgress = (data: unknown): Record<string, UserBookProgress
 
 export const getProgressEntries = async (uid: string): Promise<Record<string, UserBookProgress>> => {
   if (!db) return {};
-  const entries = await getDocs(query(collection(db, 'users', uid, 'progress'), limit(500)));
-  if (!entries.empty) return Object.fromEntries(entries.docs.map(entry => [entry.id, fromProgress(entry.id, entry.data() as Record<string, unknown>)]));
+  const [entries, migration] = await Promise.all([
+    getDocs(query(collection(db, 'users', uid, 'progress'))),
+    getDoc(doc(db, 'users', uid, 'migrationState', 'data'))
+  ]);
+  const current = Object.fromEntries(entries.docs.map(entry => [entry.id, fromProgress(entry.id, entry.data() as Record<string, unknown>)]));
+  if (migrationIsComplete(migration.data() as Record<string, unknown> | undefined, 'progress')) return current;
   const legacy = await getDoc(doc(db, 'progress', uid));
-  return normalizeLegacyProgress(legacy.data()?.progress);
+  return mergeProgressEntries(current, normalizeLegacyProgress(legacy.data()?.progress));
 };
 
 export const saveProgressEntry = async (uid: string, progress: UserBookProgress) => {

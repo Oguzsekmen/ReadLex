@@ -126,9 +126,13 @@ and chapter source. This prevents a repeat save of the same source word from
 creating another document, while allowing the word in a different book/chapter.
 
 Existing embedded book chapters and legacy `vocabulary/{uid}` / `progress/{uid}`
-documents are never deleted. Reads prefer new subcollections when they contain
-records and fall back only when they are empty. Before relying on a new write
-for an account with legacy data, copy that account using the owner-run script:
+documents are never deleted. During migration, readers merge new vocabulary and
+progress with legacy values (new values win per logical key) until the owner
+script records explicit completion under `users/{uid}/migrationState/data`.
+Embedded chapters remain authoritative while `chapterMigrationState` is
+`MIGRATING`, and switch to the chapter subcollection only at `MIGRATED`. Before
+relying on a new write for an account with legacy data, copy that account using
+the owner-run script:
 
 ```sh
 cd functions
@@ -138,9 +142,27 @@ npm run migration:legacy -- progress FIREBASE_AUTH_UID
 ```
 
 The migration is copy-only, idempotent, adds `migrationVersion`, and writes
-`migrationMetadata` for user scopes. It uses owner ADC and never runs from the
-app or deploy path. No composite indexes are currently required; the empty
-`firestore.indexes.json` is versioned for future query changes.
+completion metadata for book and user scopes. It uses owner ADC and never runs
+from the app or deploy path. No composite indexes are currently required; the
+empty `firestore.indexes.json` is versioned for future query changes.
+
+## Emulator tests
+
+The test scripts always use the disposable `demo-readlex-tests` project and
+require a local Firestore Emulator; they never use the configured production
+project or browser environment variables.
+
+```sh
+npm run test:compatibility
+npm run test:rules
+npm run test:migrations
+npm run test:emulator
+```
+
+`test:rules` covers direct browser-client Security Rules behavior. `test:migrations`
+uses fake fixtures with the Firebase Admin SDK connected to the emulator and
+executes the compiled owner migration script. Install a supported Java runtime
+and ensure `java` is on `PATH` before running the emulator commands.
 
 Legacy LocalStorage remains only as a temporary offline/error fallback. It is
 not an authentication source and is not a two-way synchronization system.
