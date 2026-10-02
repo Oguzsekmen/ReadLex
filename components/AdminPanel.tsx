@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus, Chapter } from '../types';
-import { getBooks, getPlans } from '../services/storage';
+import { getBookById, getBooks, getPlans } from '../services/storage';
 import { adminApi, getAdminApiErrorMessage } from '../services/adminApi';
 import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight, Clock } from 'lucide-react';
 import { t } from '../services/i18n';
@@ -96,10 +96,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   };
 
   // --- Book Handlers ---
-  const handleEditBook = (book?: Book) => {
+  const handleEditBook = async (book?: Book) => {
+    const loadedBook = book ? await getBookById(book.id) : undefined;
     // Deep copy to ensure we don't mutate state directly and to detach references
-    const initBook: Partial<Book> = book 
-      ? JSON.parse(JSON.stringify(book)) 
+    const initBook: Partial<Book> = loadedBook
+      ? JSON.parse(JSON.stringify(loadedBook))
       : { 
           id: '', 
           title: '', 

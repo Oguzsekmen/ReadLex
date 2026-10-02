@@ -1,0 +1,47 @@
+import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc } from 'firebase/firestore';
+import { VocabularyEntry } from '../../types';
+import { db } from '../firebase';
+
+const normalizeWord = (word: string) => word.normalize('NFKD').toLocaleLowerCase('en-US').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'word';
+
+// A vocabulary entry is stable per language, normalized spelling, and reading
+// source. The source segment prevents one book's word from overwriting another.
+export const vocabularyDocumentId = (entry: VocabularyEntry) =>
+  `v1-en-${normalizeWord(entry.word)}-${normalizeWord(entry.sourceBookId || 'manual')}-${normalizeWord(entry.sourceChapterId || 'legacy')}`.slice(0, 512);
+
+const fromEntry = (id: string, data: Record<string, unknown>): VocabularyEntry => ({
+  id,
+  word: typeof data.word === 'string' ? data.word : '',
+  translation: typeof data.translation === 'string' ? data.translation : '',
+  definition: typeof data.definition === 'string' ? data.definition : '',
+  exampleSentence: typeof data.exampleSentence === 'string' ? data.exampleSentence : '',
+  type: typeof data.type === 'string' ? data.type : '',
+  level: (typeof data.level === 'string' ? data.level : 'A1') as VocabularyEntry['level'],
+  sourceBookId: typeof data.sourceBookId === 'string' ? data.sourceBookId : '',
+  sourceChapterId: typeof data.sourceChapterId === 'string' ? data.sourceChapterId : undefined,
+  nextReviewDate: new Date(),
+  strength: typeof data.strength === 'number' ? data.strength : 0,
+  normalizedWord: typeof data.normalizedWord === 'string' ? data.normalizedWord : normalizeWord(typeof data.word === 'string' ? data.word : '')
+});
+
+export const getVocabularyEntries = async (uid: string): Promise<VocabularyEntry[]> => {
+  if (!db) return [];
+  const entries = await getDocs(query(collection(db, 'users', uid, 'vocabulary'), limit(500)));
+  if (!entries.empty) return entries.docs.map(entry => fromEntry(entry.id, entry.data() as Record<string, unknown>));
+  const legacy = await getDoc(doc(db, 'vocabulary', uid));
+  const words = legacy.data()?.words;
+  return Array.isArray(words) ? words.map((word, index) => fromEntry(typeof word?.id === 'string' ? word.id : `legacy-${index}`, word as Record<string, unknown>)) : [];
+};
+
+export const saveVocabularyEntry = async (uid: string, entry: VocabularyEntry): Promise<VocabularyEntry> => {
+  if (!db) throw new Error('Firestore is unavailable.');
+  const id = vocabularyDocumentId(entry);
+  const ref = doc(db, 'users', uid, 'vocabulary', id);
+  await setDoc(ref, { ...entry, id, normalizedWord: normalizeWord(entry.word), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+  return { ...entry, id, normalizedWord: normalizeWord(entry.word) };
+};
+
+export const deleteVocabularyEntry = async (uid: string, entryId: string) => {
+  if (!db) throw new Error('Firestore is unavailable.');
+  return deleteDoc(doc(db, 'users', uid, 'vocabulary', entryId));
+};

@@ -13,6 +13,8 @@ import {
   getUserProgress, 
   saveUserProgress, 
   saveUser,
+  deleteUserVocab,
+  getBookById,
   getPlans,
   isUsingFirebase,
   lastFirebaseError
@@ -500,11 +502,11 @@ const App = () => {
     handleUpdateUser(newUser);
   };
 
-  const handleSaveWord = (word: VocabularyWord) => {
+  const handleSaveWord = async (word: VocabularyWord) => {
     if (!user) return;
-    const newWords = [word, ...savedWords];
+    const persistedWord = await saveUserVocab(user.id, [word, ...savedWords]);
+    const newWords = [persistedWord, ...savedWords.filter(savedWord => savedWord.id !== persistedWord.id)];
     setSavedWords(newWords);
-    saveUserVocab(user.id, newWords);
 
     const wordsToday = getDailyWordCountInternal(newWords); 
     const currentGoal = user.dailyGoal || 25;
@@ -519,32 +521,34 @@ const App = () => {
     }
   };
 
-  const handleDeleteWord = (id: string) => {
+  const handleDeleteWord = async (id: string) => {
     if (!user) return;
     const newWords = savedWords.filter(w => w.id !== id);
     setSavedWords(newWords);
-    saveUserVocab(user.id, newWords);
+    await deleteUserVocab(user.id, id, newWords);
   };
 
   // UPDATED: Added autoJump to handle resuming reading automatically
-  const handleSelectBook = (book: Book, autoJump: boolean = false) => {
+  const handleSelectBook = async (book: Book, autoJump: boolean = false) => {
     if (!user) return;
-    setSelectedBook(book);
+    const loadedBook = await getBookById(book.id);
+    if (!loadedBook) return;
+    setSelectedBook(loadedBook);
     
     const progress = bookProgress[book.id];
     
     // Auto-initialization if not exists
     if (!progress) {
       const newEntry: UserBookProgress = {
-          bookId: book.id,
+          bookId: loadedBook.id,
           status: 'IN_PROGRESS',
           currentChapterIndex: 0,
           lastWordIndex: 0, // Initialize new field
           lastReadAt: new Date()
       };
-      const newProgress = { ...bookProgress, [book.id]: newEntry };
+      const newProgress = { ...bookProgress, [loadedBook.id]: newEntry };
       setBookProgress(newProgress);
-      saveUserProgress(user.id, newProgress);
+      saveUserProgress(user.id, newEntry);
       
       if (autoJump) {
          setActiveChapterIndex(0);
@@ -554,7 +558,7 @@ const App = () => {
     } else {
        if (autoJump) {
           // If autoJump is true, jump to currentChapterIndex
-          const chapters = book.chapters || [];
+          const chapters = loadedBook.chapters || [];
           const idx = progress.currentChapterIndex < chapters.length ? progress.currentChapterIndex : 0;
           setActiveChapterIndex(idx);
        } else {
@@ -599,7 +603,7 @@ const App = () => {
 
     const newProgressMap = { ...bookProgress, [bookId]: newProgressEntry };
     setBookProgress(newProgressMap);
-    saveUserProgress(user.id, newProgressMap);
+    saveUserProgress(user.id, newProgressEntry);
   };
 
   // NEW: Handle granular word progress updates
@@ -621,7 +625,7 @@ const App = () => {
     const newProgressMap = { ...bookProgress, [bookId]: newProgressEntry };
     setBookProgress(newProgressMap);
     // Persist to storage
-    saveUserProgress(user.id, newProgressMap);
+    saveUserProgress(user.id, newProgressEntry);
   };
 
   const handleStartQuiz = () => {

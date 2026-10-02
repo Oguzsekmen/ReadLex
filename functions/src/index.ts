@@ -1,5 +1,6 @@
 import { logger, setGlobalOptions } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, adminDb } from './admin';
 import { requireAdmin } from './middleware/authorization';
 import { resourceId, validateBook, validatePlan } from './utils/validation';
@@ -12,12 +13,47 @@ const audit = (operation: string, adminUid: string, resourceId: string, result: 
 const totalWords = (chapters: Array<{ content: string }>) =>
   chapters.reduce((total, chapter) => total + chapter.content.trim().split(/\s+/).filter(Boolean).length, 0);
 
+const writeBook = async (id: string, book: ReturnType<typeof validateBook>, creating: boolean) => {
+  const ref = adminDb.collection('books').doc(id);
+  const existingChapters = creating ? undefined : await ref.collection('chapters').get();
+  const nextChapterIds = new Set(book.chapters.map(chapter => chapter.id));
+  const batch = adminDb.batch();
+  const metadata = {
+    id,
+    title: book.title,
+    author: book.author,
+    level: book.level,
+    coverUrl: book.coverUrl,
+    excerpt: book.excerpt,
+    totalWords: totalWords(book.chapters),
+    requiredPlan: book.requiredPlan,
+    archived: book.archived,
+    chapterCount: book.chapters.length,
+    updatedAt: FieldValue.serverTimestamp()
+  };
+  if (creating) batch.create(ref, { ...metadata, createdAt: FieldValue.serverTimestamp() });
+  else batch.set(ref, metadata, { merge: true });
+  for (const [order, chapter] of book.chapters.entries()) {
+    batch.set(ref.collection('chapters').doc(chapter.id), {
+      ...chapter,
+      order,
+      wordCount: chapter.content.trim().split(/\s+/).filter(Boolean).length,
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  for (const chapter of existingChapters?.docs || []) {
+    if (!nextChapterIds.has(chapter.id)) batch.delete(chapter.ref);
+  }
+  await batch.commit();
+  return { ...metadata, id, chapters: book.chapters };
+};
+
 export const createBook = onCall(async (request) => {
   const { uid } = requireAdmin(request);
   const book = validateBook(request.data);
   const ref = adminDb.collection('books').doc();
-  const storedBook = { id: ref.id, ...book, totalWords: totalWords(book.chapters) };
-  await ref.create(storedBook);
+  const storedBook = await writeBook(ref.id, book, true);
   audit('createBook', uid, ref.id, 'success');
   return { book: storedBook };
 });
@@ -29,8 +65,7 @@ export const updateBook = onCall(async (request) => {
   const book = validateBook(data);
   const ref = adminDb.collection('books').doc(id);
   if (!(await ref.get()).exists) throw new HttpsError('not-found', 'Book not found.');
-  const storedBook = { id, ...book, totalWords: totalWords(book.chapters) };
-  await ref.set(storedBook);
+  const storedBook = await writeBook(id, book, false);
   audit('updateBook', uid, id, 'success');
   return { book: storedBook };
 });
@@ -42,7 +77,7 @@ export const archiveBook = onCall(async (request) => {
   if (typeof data?.archived !== 'boolean') throw new HttpsError('invalid-argument', 'Invalid archived state.');
   const ref = adminDb.collection('books').doc(id);
   if (!(await ref.get()).exists) throw new HttpsError('not-found', 'Book not found.');
-  await ref.update({ archived: data.archived });
+  await ref.update({ archived: data.archived, updatedAt: FieldValue.serverTimestamp() });
   audit('archiveBook', uid, id, 'success');
   return { id, archived: data.archived };
 });

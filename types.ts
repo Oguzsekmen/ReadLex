@@ -7,7 +7,7 @@ export type UserRole = 'USER' | 'ADMIN';
 export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED';
 export type PlanType = string; 
 
-export interface User {
+export interface UserProfile {
   id: string;
   email: string;
   name: string;
@@ -30,6 +30,10 @@ export interface User {
   emailVerified?: boolean;
 }
 
+// Existing components retain User during the transition; it is the application
+// view of the Firestore users/{uid} profile rather than an Auth credential.
+export interface User extends UserProfile {}
+
 export interface Chapter {
   id: string;
   title: string;
@@ -42,11 +46,16 @@ export interface Book {
   author: string;
   level: CEFRLevel;
   coverUrl: string;
-  chapters: Chapter[]; // Changed from content: string
+  // Present when a reader/admin explicitly loads chapter content. Library
+  // listings use metadata only and retain this optional for legacy documents.
+  chapters?: Chapter[];
   excerpt: string;
   totalWords: number;
   requiredPlan: PlanType[]; 
   archived: boolean; 
+  chapterCount?: number;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
 }
 
 export interface UserBookProgress {
@@ -55,9 +64,12 @@ export interface UserBookProgress {
   currentChapterIndex: number; // Track which chapter user is on
   lastWordIndex?: number; // New: Track specific word position in the chapter
   lastReadAt: Date;
+  currentChapterId?: string;
+  progressPercent?: number;
+  completedAt?: Date;
 }
 
-export interface VocabularyWord {
+export interface VocabularyEntry {
   id: string;
   word: string;
   translation: string;
@@ -68,14 +80,80 @@ export interface VocabularyWord {
   sourceBookId: string;
   nextReviewDate: Date;
   strength: number; 
+  normalizedWord?: string;
+  sourceChapterId?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+  nextReviewAt?: Date | number;
+  lastReviewedAt?: Date | number;
+  correctCount?: number;
+  wrongCount?: number;
+  repetitions?: number;
+  easeFactor?: number;
 }
 
-export interface PlanConfig {
+export type VocabularyWord = VocabularyEntry;
+
+export interface Plan {
   id: PlanType;
   name: string;
   price: number;
   durationDays: number; 
   features: string[];
+}
+
+export type PlanConfig = Plan;
+
+export interface ReviewEvent {
+  id: string;
+  vocabularyId: string;
+  result: 'CORRECT' | 'WRONG' | 'SKIPPED';
+  questionType: QuizQuestion['type'];
+  previousStrength: number;
+  newStrength?: number;
+  reviewedAt: Date | number;
+}
+
+export type SubscriptionState = 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED';
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  planId: PlanType;
+  status: SubscriptionState;
+  provider: string;
+  trialStartedAt?: Date | number;
+  trialEndsAt?: Date | number;
+  currentPeriodStart?: Date | number;
+  currentPeriodEnd?: Date | number;
+  cancelAtPeriodEnd?: boolean;
+  providerSubscriptionId?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+}
+
+export interface Payment {
+  id: string;
+  userId: string;
+  subscriptionId?: string;
+  provider: string;
+  status: string;
+  amount?: number;
+  currency?: string;
+  providerPaymentId?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+}
+
+export interface DictionaryEntry {
+  id: string;
+  word: string;
+  normalizedWord: string;
+  language: string;
+  translation?: string;
+  definition?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
 }
 
 export interface QuizQuestion {

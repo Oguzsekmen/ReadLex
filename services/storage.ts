@@ -1,7 +1,10 @@
-import { Book, User, VocabularyWord, BookStatus, PlanConfig, DefinitionResponse, UserBookProgress } from '../types';
+import { Book, User, VocabularyWord, PlanConfig, DefinitionResponse, UserBookProgress } from '../types';
 import { MOCK_BOOKS, DEFAULT_PLANS } from './data';
 import { db } from './firebase';
 import { User as FirebaseUser } from 'firebase/auth';
+import { getBookList, getBookWithChapters } from './data/books';
+import { deleteVocabularyEntry, getVocabularyEntries, saveVocabularyEntry } from './data/vocabulary';
+import { getProgressEntries, saveProgressEntry } from './data/progress';
 import { 
   collection, 
   doc, 
@@ -213,15 +216,26 @@ export const loadOrCreateUserProfile = async (firebaseUser: FirebaseUser): Promi
 
 export const getBooks = async (): Promise<Book[]> => {
     return withFallback(
-        async () => {
-            const snapshot = await getDocs(collection(db!, BOOKS_COL));
-            return snapshot.docs.map(d => d.data() as Book);
-        },
+        () => getBookList(),
         () => {
             const booksStr = localStorage.getItem(LOCAL_KEYS.BOOKS);
             return booksStr ? JSON.parse(booksStr) : MOCK_BOOKS;
         }
     );
+};
+
+export const getBookById = async (bookId: string): Promise<Book | undefined> => {
+  if (!db) {
+    const books = await getBooks();
+    return books.find(book => book.id === bookId);
+  }
+  try {
+    return await getBookWithChapters(bookId);
+  } catch (error: any) {
+    lastFirebaseError = error.message;
+    const books = await getBooks();
+    return books.find(book => book.id === bookId);
+  }
 };
 
 export const saveBook = async (book: Book) => {
@@ -260,11 +274,7 @@ export const savePlans = async (plans: PlanConfig[]) => {
 
 export const getUserVocab = async (userId: string): Promise<VocabularyWord[]> => {
     return withFallback(
-        async () => {
-            const docRef = doc(db!, VOCAB_COL, userId);
-            const docSnap = await getDoc(docRef);
-            return docSnap.exists() ? docSnap.data()?.words : [];
-        },
+        () => getVocabularyEntries(userId),
         () => {
             const vocabStr = localStorage.getItem(LOCAL_KEYS.VOCAB_PREFIX + userId);
             return vocabStr ? JSON.parse(vocabStr) : [];
@@ -272,61 +282,48 @@ export const getUserVocab = async (userId: string): Promise<VocabularyWord[]> =>
     );
 };
 
-export const saveUserVocab = async (userId: string, words: VocabularyWord[]) => {
-    return withFallback(
-        async () => await setDoc(doc(db!, VOCAB_COL, userId), { words }),
-        async () => {
-            localStorage.setItem(LOCAL_KEYS.VOCAB_PREFIX + userId, JSON.stringify(words));
-        }
-    );
+export const saveUserVocab = async (userId: string, words: VocabularyWord[]): Promise<VocabularyWord> => {
+    if (!words.length) throw new Error('Vocabulary entry is required.');
+    // Compatibility wrapper for existing UI callers. New writes are individual
+    // subcollection documents; legacy vocabulary/{uid} is never expanded.
+    const newest = words[0];
+    if (!db) {
+      localStorage.setItem(LOCAL_KEYS.VOCAB_PREFIX + userId, JSON.stringify(words));
+      return newest;
+    }
+    try {
+      return await saveVocabularyEntry(userId, newest);
+    } catch (error: any) {
+      lastFirebaseError = error.message;
+      localStorage.setItem(LOCAL_KEYS.VOCAB_PREFIX + userId, JSON.stringify(words));
+      return newest;
+    }
 };
+
+export const deleteUserVocab = async (userId: string, wordId: string, remainingWords: VocabularyWord[]) =>
+  withFallback(
+    () => deleteVocabularyEntry(userId, wordId),
+    async () => localStorage.setItem(LOCAL_KEYS.VOCAB_PREFIX + userId, JSON.stringify(remainingWords))
+  );
 
 // HELPER: Normalize raw data to UserBookProgress objects
-const normalizeProgressData = (data: any): Record<string, UserBookProgress> => {
-    const normalized: Record<string, UserBookProgress> = {};
-    if (!data) return normalized;
-
-    for (const key in data) {
-        if (typeof data[key] === 'string') {
-            // Convert Legacy String Status to Object
-            normalized[key] = {
-                bookId: key,
-                status: data[key] as BookStatus,
-                currentChapterIndex: data[key] === 'COMPLETED' ? 999 : 0,
-                lastReadAt: new Date()
-            };
-        } else {
-            // Already an object, ensure all fields exist
-            normalized[key] = {
-                ...data[key],
-                lastWordIndex: data[key].lastWordIndex || 0
-            };
-        }
-    }
-    return normalized;
-};
-
 export const getUserProgress = async (userId: string): Promise<Record<string, UserBookProgress>> => {
     return withFallback(
-        async () => {
-            const docRef = doc(db!, PROGRESS_COL, userId);
-            const docSnap = await getDoc(docRef);
-            const rawData = docSnap.exists() ? docSnap.data()?.progress : {};
-            return normalizeProgressData(rawData);
-        },
+        () => getProgressEntries(userId),
         () => {
             const progStr = localStorage.getItem(LOCAL_KEYS.PROGRESS_PREFIX + userId);
-            const rawData = progStr ? JSON.parse(progStr) : {};
-            return normalizeProgressData(rawData);
+            return progStr ? JSON.parse(progStr) : {};
         }
     );
 };
 
-export const saveUserProgress = async (userId: string, progress: Record<string, UserBookProgress>) => {
+export const saveUserProgress = async (userId: string, progress: UserBookProgress) => {
     return withFallback(
-        async () => await setDoc(doc(db!, PROGRESS_COL, userId), { progress }),
+        () => saveProgressEntry(userId, progress),
         async () => {
-            localStorage.setItem(LOCAL_KEYS.PROGRESS_PREFIX + userId, JSON.stringify(progress));
+            const raw = localStorage.getItem(LOCAL_KEYS.PROGRESS_PREFIX + userId);
+            const existing = raw ? JSON.parse(raw) as Record<string, UserBookProgress> : {};
+            localStorage.setItem(LOCAL_KEYS.PROGRESS_PREFIX + userId, JSON.stringify({ ...existing, [progress.bookId]: progress }));
         }
     );
 };

@@ -109,3 +109,38 @@ firebase deploy --only functions,firestore:rules
 The emulator UI is configured on port 4000, Functions on 5001, and Firestore
 on 8080. Deployment is intentionally manual; this repository contains no
 service-account JSON or deploy credentials.
+
+## Firestore data-model transition
+
+New client writes use scalable documents while reads retain legacy fallback:
+
+- `books/{bookId}` metadata with `books/{bookId}/chapters/{chapterId}` content.
+- `users/{uid}/vocabulary/{entryId}` for individual vocabulary entries.
+- `users/{uid}/progress/{bookId}` for one-book progress updates.
+- `users/{uid}/reviewEvents/{eventId}` is reserved for a future Learning Engine.
+- `subscriptions`, `payments`, and `dictionary` are typed and rule-protected;
+  their server workflows are intentionally not implemented yet.
+
+New vocabulary IDs are deterministic from language, normalized spelling, book,
+and chapter source. This prevents a repeat save of the same source word from
+creating another document, while allowing the word in a different book/chapter.
+
+Existing embedded book chapters and legacy `vocabulary/{uid}` / `progress/{uid}`
+documents are never deleted. Reads prefer new subcollections when they contain
+records and fall back only when they are empty. Before relying on a new write
+for an account with legacy data, copy that account using the owner-run script:
+
+```sh
+cd functions
+npm run migration:legacy -- books
+npm run migration:legacy -- vocabulary FIREBASE_AUTH_UID
+npm run migration:legacy -- progress FIREBASE_AUTH_UID
+```
+
+The migration is copy-only, idempotent, adds `migrationVersion`, and writes
+`migrationMetadata` for user scopes. It uses owner ADC and never runs from the
+app or deploy path. No composite indexes are currently required; the empty
+`firestore.indexes.json` is versioned for future query changes.
+
+Legacy LocalStorage remains only as a temporary offline/error fallback. It is
+not an authentication source and is not a two-way synchronization system.

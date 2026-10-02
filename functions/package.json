@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions,firestore",
-    "admin:set-claim": "npm run build && node lib/scripts/setAdminClaim.js"
+    "admin:set-claim": "npm run build && node lib/scripts/setAdminClaim.js",
+    "migration:legacy": "npm run build && node lib/scripts/migrateLegacyData.js"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
