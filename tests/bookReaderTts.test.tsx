@@ -1,0 +1,13 @@
+// @vitest-environment jsdom
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const tts = { speaking: false, synchronizationSupported: true, activeTokenIndex: undefined as number | undefined, activeSentenceId: undefined as string | undefined, pause: vi.fn(), stop: vi.fn() };
+vi.mock('../hooks/useReaderTts', () => ({ useReaderTts: () => ({ supported: true, status: 'IDLE', paused: false, rate: 1, voice: undefined, voices: [], setVoice: vi.fn(), followEnabled: true, setFollowEnabled: vi.fn(), start: vi.fn(), startFromToken: vi.fn(), resume: vi.fn(), setRate: vi.fn(), repeatCurrentSentence: vi.fn(), previousSentence: vi.fn(), nextSentence: vi.fn(), ...tts }) }));
+vi.mock('../services/readerLanguageData', async () => ({ ...(await vi.importActual<object>('../services/readerLanguageData')), readerLanguageData: { loadChapter: vi.fn(async (_book: string, _chapter: string, content: string) => ({ mode: 'prepared', metadata: { chapterContentHash: 'h', processingVersion: '1', sourceLanguage: 'en', targetLanguage: 'tr', tokenChunkSize: 50 }, tokens: [{ index: 0, text: 'Door', normalized: 'door', start: 0, end: 4, sentenceId: 's1', isWord: true }, { index: 1, text: ' ', normalized: null, start: 4, end: 5, sentenceId: 's1', isWord: false }, { index: 2, text: 'door', normalized: 'door', start: 5, end: 9, sentenceId: 's1', isWord: true }], dictionaries: new Map(), dictionaryPrefetch: Promise.resolve() })) } }));
+import BookReaderV2 from '../components/BookReaderV2';
+
+const book: any = { id: 'b', title: 'B', author: 'A', level: 'A1', coverUrl: '', excerpt: '', totalWords: 2, requiredPlan: [], archived: false, languageProcessingStatus: 'COMPLETED', chapters: [{ id: 'c1', title: 'C1', content: 'Door door' }, { id: 'c2', title: 'C2', content: 'Next' }] };
+const renderReader = () => render(<BookReaderV2 book={book} initialChapterIndex={0} onBack={vi.fn()} onSaveWord={vi.fn()} savedWords={[]} onCompleteChapter={vi.fn()} onUpdateProgress={vi.fn()} />);
+describe('BookReader TTS integration', () => { beforeEach(() => { tts.speaking = false; tts.activeTokenIndex = undefined; tts.activeSentenceId = undefined; tts.pause.mockClear(); tts.stop.mockClear(); }); it('opens silently and preserves repeated chapter words', async () => { renderReader(); expect(await screen.findByText('Door')).toBeTruthy(); expect(screen.getAllByText('door')).toHaveLength(1); }); it('pauses narration before the existing translation selection flow', async () => { tts.speaking = true; renderReader(); fireEvent.click(await screen.findByText('door')); await waitFor(() => expect(tts.pause).toHaveBeenCalled()); expect(screen.getByText('door')).toBeTruthy(); }); });
