@@ -85,6 +85,16 @@ export interface DetectedChapter {
   sourceEnd?: number;
 }
 
+export interface BookImportSourceFile {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  order: number;
+  uploadedAt?: Date | number;
+}
+
 export interface BookImportJob {
   id: string;
   createdBy: string;
@@ -108,6 +118,16 @@ export interface BookImportJob {
   publishedBookId?: string;
   normalizationVersion?: string;
   chapterDetectionVersion?: string;
+  sourceFiles?: BookImportSourceFile[];
+  ocrStatus?: 'NOT_STARTED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  ocrProvider?: string;
+  ocrVersion?: string;
+  ocrStartedAt?: Date | number;
+  ocrCompletedAt?: Date | number;
+  pagesTotal?: number;
+  pagesProcessed?: number;
+  progressPercent?: number;
+  draftChapterCount?: number;
 }
 
 export interface UserBookProgress {

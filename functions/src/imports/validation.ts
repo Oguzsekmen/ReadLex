@@ -1,6 +1,11 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { resourceId } from '../utils/validation';
-import { ImportChapter, ImportSourceType } from './domain';
+import { ImportChapter, ImportSourceFile, ImportSourceType } from './domain';
+
+export const MAX_IMAGE_FILES = 20;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+export const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const fail = (message: string): never => { throw new HttpsError('invalid-argument', message); };
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : fail('Expected an object.');
@@ -49,6 +54,30 @@ export const validateImportMetadata = (value: unknown): ImportMetadata => {
 };
 
 export const validateRawText = (value: unknown) => requiredText(value, 'rawText', 2_000_000);
+
+const fileName = (value: unknown) => requiredText(value, 'fileName', 255).replace(/[\\/]/g, '_');
+const fileId = (value: unknown) => resourceId(value);
+export const importSourcePath = (importId: string, id: string, name: string) => `book-imports/${importId}/source/${id}-${name}`;
+
+export const validateImportSourceFiles = (importId: string, sourceType: ImportSourceType, value: unknown): ImportSourceFile[] => {
+  const files = Array.isArray(value) ? value : fail('Invalid source files.');
+  if (!files.length || files.length > MAX_IMAGE_FILES) fail('Invalid source file count.');
+  if (sourceType === 'PDF' && files.length !== 1) fail('A PDF import requires one file.');
+  if (sourceType === 'TEXT') fail('TEXT imports do not accept uploaded files.');
+  const ids = new Set<string>();
+  return files.map((item, order) => {
+    const input = record(item); const id = fileId(input.id); const name = fileName(input.fileName);
+    if (ids.has(id)) fail('Duplicate source file id.'); ids.add(id);
+    const contentType = requiredText(input.contentType, 'contentType', 100).toLowerCase();
+    const size = input.size;
+    if (!Number.isSafeInteger(size) || (size as number) <= 0) fail('Invalid source file size.');
+    if (sourceType === 'IMAGE' && (!allowedImageTypes.has(contentType) || (size as number) > MAX_IMAGE_BYTES)) fail('Unsupported image file.');
+    if (sourceType === 'PDF' && (contentType !== 'application/pdf' || (size as number) > MAX_PDF_BYTES)) fail('Unsupported PDF file.');
+    const storagePath = requiredText(input.storagePath, 'storagePath', 600);
+    if (storagePath !== importSourcePath(importId, id, name)) fail('Invalid source storage path.');
+    return { id, fileName: name, storagePath, contentType, size: size as number, order };
+  });
+};
 
 export const validateImportChapters = (value: unknown, allowEmpty = true): ImportChapter[] => {
   const chapters = Array.isArray(value) ? value : fail('Invalid detectedChapters.');

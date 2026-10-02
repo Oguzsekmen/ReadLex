@@ -2,14 +2,15 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { ImportStatus } from './domain';
 
 const transitions: Record<ImportStatus, ImportStatus[]> = {
-  DRAFT: ['PROCESSING', 'CANCELED'],
+  DRAFT: ['UPLOADED', 'PROCESSING', 'CANCELED'],
   UPLOADED: ['PROCESSING', 'CANCELED'],
   PROCESSING: ['REVIEW_REQUIRED', 'READY_TO_PUBLISH', 'FAILED', 'CANCELED'],
   REVIEW_REQUIRED: ['PROCESSING', 'READY_TO_PUBLISH', 'CANCELED'],
   READY_TO_PUBLISH: ['PROCESSING', 'PUBLISHING', 'REVIEW_REQUIRED', 'CANCELED'],
   PUBLISHING: ['PUBLISHED', 'FAILED'],
   PUBLISHED: [],
-  FAILED: [],
+  // A failed OCR import may be explicitly retried by an administrator.
+  FAILED: ['PROCESSING'],
   CANCELED: []
 };
 

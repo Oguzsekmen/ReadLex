@@ -103,11 +103,11 @@ npm install
 npm run build
 cd ..
 firebase emulators:start
-firebase deploy --only functions,firestore:rules
+firebase deploy --only functions,firestore:rules,storage
 ```
 
-The emulator UI is configured on port 4000, Functions on 5001, and Firestore
-on 8080. Deployment is intentionally manual; this repository contains no
+The emulator UI is configured on port 4000, Functions on 5001, Firestore on
+8080, and Storage on 9199. Deployment is intentionally manual; this repository contains no
 service-account JSON or deploy credentials.
 
 ## Firestore data-model transition
@@ -157,6 +157,8 @@ npm run test:compatibility
 npm run test:rules
 npm run test:migrations
 npm run test:imports
+npm run test:ocr
+npm run test:storage
 npm run test:emulator
 ```
 
@@ -174,13 +176,47 @@ Administrators create and review imports through callable Functions only. The
 `bookImports/{importId}` collection is never directly readable or writable by
 browser clients, including clients with an `admin: true` custom claim.
 
-Phase 3A fully supports pasted `TEXT`: raw text is preserved, normalized with
+Pasted `TEXT` is fully supported: raw text is preserved, normalized with
 the deterministic conservative utility, and converted into editable chapter
 preview data before publication. `IMAGE` and `PDF` are modeled for later use
-but return `NOT_IMPLEMENTED_YET`; this repository performs no OCR, upload, or
-translation work in this phase. Publishing is transaction-backed and
+OCR source files use the narrow Storage prefix
+`book-imports/{importId}/source/{fileId}-{safeFileName}`. Storage Rules permit
+only an authenticated `admin: true` browser token to create bounded JPG/JPEG,
+PNG, WEBP, or PDF source files there; browser reads, updates, deletes, OCR
+output, and every other bucket path are denied. Callable Functions verify the
+stored object metadata before accepting it into the server-authoritative job.
+
+Phase 3B supports ordered page-image OCR and scanned PDF OCR through a
+server-only provider adapter. The initial `google-vision` adapter uses runtime
+Application Default Credentials and document text detection. Images are
+processed one page at a time; PDFs use Cloud Vision's asynchronous GCS output
+operation (set `OCR_OUTPUT_BUCKET` only when output must use a different
+server-controlled bucket). No browser OCR credential, service-account JSON,
+or `VITE_GOOGLE_*` secret is used. OCR results are retained in
+`bookImports/{importId}/pages` and editable previews in
+`bookImports/{importId}/draftChapters`, so large source/preview text does not
+inflate the import job document. Publishing is transaction-backed and
 idempotent, creating book metadata plus chapter subdocuments once and retaining
 the import record as the source of provenance.
+
+### Owner setup for OCR
+
+1. Enable Firebase Storage and deploy `storage.rules`.
+2. Enable the Google Cloud Vision API for the Firebase project.
+3. Give the Cloud Functions runtime service account permission to read the
+   import bucket and invoke Vision. For Vision PDF async output, it must also
+   read/write the configured output bucket.
+4. Deploy the functions, Firestore Rules, and Storage Rules:
+
+```sh
+firebase deploy --only functions,firestore:rules,storage
+```
+
+`OCR_PROVIDER=google-vision` is the default. Configure it only in the server
+runtime/environment; never put provider credentials in the web app. OCR is a
+bounded hybrid job (at most 20 images or one 25 MB PDF) and persists status and
+page progress for polling. For very large documents, move the existing provider
+service boundary to Cloud Tasks/Cloud Run before raising these limits.
 
 Run the import coverage with:
 

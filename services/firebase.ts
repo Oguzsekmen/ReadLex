@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
 import { getFunctions, Functions } from 'firebase/functions';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getAnalytics, Analytics } from 'firebase/analytics';
 
 // Firebase web configuration is intentionally browser-visible. It is not a
@@ -24,6 +25,7 @@ let auth: Auth | undefined;
 let googleProvider: GoogleAuthProvider | undefined;
 let analytics: Analytics | undefined;
 let functions: Functions | undefined;
+let storage: FirebaseStorage | undefined;
 let initializationError: string | null = null;
 
 try {
@@ -86,6 +88,12 @@ try {
                 console.warn("Firebase Functions init failed:", functionsError);
                 if (!initializationError) initializationError = functionsError.message || "Functions init failed";
             }
+            try {
+                storage = getStorage(app);
+            } catch (storageError: any) {
+                console.warn('Firebase Storage init failed:', storageError);
+                if (!initializationError) initializationError = storageError.message || 'Storage init failed';
+            }
         }
     }
 } catch (e: any) {
@@ -93,4 +101,4 @@ try {
     initializationError = e.message;
 }
 
-export { db, auth, googleProvider, analytics, functions, initializationError };
+export { db, auth, googleProvider, analytics, functions, storage, initializationError };

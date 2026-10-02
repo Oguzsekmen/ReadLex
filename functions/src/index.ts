@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, adminDb } from './admin';
 import { requireAdmin } from './middleware/authorization';
 import { resourceId, validateBook, validatePlan } from './utils/validation';
-import { cancelImport, createImport, getImport, listImports, processTextImport, publishImport, updateImportChapters, updateImportMetadata } from './imports/service';
+import { cancelImport, createImport, getImport, listImports, processOcrImport, processTextImport, publishImport, registerImportSourceFiles, updateImportChapters, updateImportMetadata } from './imports/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -176,6 +176,23 @@ export const setBookImportText = onCall(async (request) => {
   const id = resourceId(data?.id);
   const imported = await processTextImport(id, data?.rawText);
   audit('setBookImportText', uid, id, 'success');
+  return { import: imported };
+});
+
+export const registerBookImportSourceFiles = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const data = request.data as Record<string, unknown>;
+  const id = resourceId(data?.id);
+  const imported = await registerImportSourceFiles(id, data?.files);
+  audit('registerBookImportSourceFiles', uid, id, 'success');
+  return { import: imported };
+});
+
+export const startBookImportOcr = onCall({ timeoutSeconds: 120, memory: '1GiB' }, async (request) => {
+  const { uid } = requireAdmin(request);
+  const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const imported = await processOcrImport(id);
+  audit('startBookImportOcr', uid, id, 'success');
   return { import: imported };
 });
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { BookImportJob, BookImportSourceType, CEFRLevel, DetectedChapter, PlanConfig } from '../types';
-import { contentImportApi } from '../services/contentImportApi';
+import { BookImportJob, BookImportSourceFile, BookImportSourceType, CEFRLevel, DetectedChapter, PlanConfig } from '../types';
+import { contentImportApi, uploadImportSourceFile } from '../services/contentImportApi';
 import { getAdminApiErrorMessage } from '../services/adminApi';
 import { Check, ChevronDown, ChevronUp, FileText, Loader2, Plus, Save, Send, Trash2, X } from 'lucide-react';
 
@@ -31,6 +31,7 @@ const ContentImports: React.FC<ContentImportsProps> = ({ plans }) => {
   const [current, setCurrent] = useState<Partial<BookImportJob> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const refresh = async () => {
     setIsLoading(true);
@@ -96,6 +97,39 @@ const ContentImports: React.FC<ContentImportsProps> = ({ plans }) => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!current?.id || !files?.length) return;
+    const selected = Array.from(files);
+    const image = current.sourceType === 'IMAGE';
+    if ((image && (selected.length > 20 || selected.some(file => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024))) || (!image && (selected.length !== 1 || selected[0].type !== 'application/pdf' || selected[0].size > 25 * 1024 * 1024))) {
+      alert(image ? 'Upload up to 20 JPG, PNG, or WEBP files (10 MB each).' : 'Upload one PDF up to 25 MB.'); return;
+    }
+    setIsSaving(true); setUploadProgress(0);
+    try {
+      const records: BookImportSourceFile[] = current.sourceFiles ? [...current.sourceFiles] : [];
+      for (const [order, file] of selected.entries()) {
+        const id = `source-${Date.now()}-${order}`;
+        records.push(await uploadImportSourceFile(current.id, file, id, records.length, progress => setUploadProgress(Math.round((order * 100 + progress) / selected.length))));
+      }
+      const result = await contentImportApi.registerSourceFiles(current.id, records.map((file, order) => ({ ...file, order })));
+      setCurrent(result.import); await refresh();
+    } catch (error) { alert(getAdminApiErrorMessage(error)); }
+    finally { setIsSaving(false); setUploadProgress(null); }
+  };
+
+  const processOcr = async () => {
+    if (!current?.id) return; setIsSaving(true);
+    try { const result = await contentImportApi.startOcr(current.id); setCurrent(result.import); await refresh(); }
+    catch (error) { alert(getAdminApiErrorMessage(error)); }
+    finally { setIsSaving(false); }
+  };
+
+  const saveSourceOrder = async () => {
+    if (!current?.id || !current.sourceFiles?.length) return; setIsSaving(true);
+    try { const result = await contentImportApi.registerSourceFiles(current.id, current.sourceFiles.map((file, order) => ({ ...file, order }))); setCurrent(result.import); await refresh(); }
+    catch (error) { alert(getAdminApiErrorMessage(error)); } finally { setIsSaving(false); }
   };
 
   const updateChapter = (index: number, patch: Partial<DetectedChapter>) => setCurrent(previous => previous ? {
@@ -172,7 +206,7 @@ const ContentImports: React.FC<ContentImportsProps> = ({ plans }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <label className="text-sm font-bold text-gray-500">Source type
           <select disabled={!!current.id} value={current.sourceType || 'TEXT'} onChange={event => setCurrent({ ...current, sourceType: event.target.value as BookImportSourceType })} className="mt-1 w-full p-2 border rounded dark:bg-gray-900 dark:text-white">
-            <option value="TEXT">TEXT</option><option value="IMAGE">IMAGE (planned)</option><option value="PDF">PDF (planned)</option>
+            <option value="TEXT">TEXT</option><option value="IMAGE">IMAGE</option><option value="PDF">PDF</option>
           </select>
         </label>
         <label className="text-sm font-bold text-gray-500">Status<input readOnly value={current.status || 'DRAFT'} className="mt-1 w-full p-2 border rounded bg-gray-100 dark:bg-gray-900 dark:text-white" /></label>
@@ -186,8 +220,7 @@ const ContentImports: React.FC<ContentImportsProps> = ({ plans }) => {
       {current.id && <>
         <div className="border-t pt-5 dark:border-gray-700">
           <h3 className="font-bold dark:text-white mb-2">Source text</h3>
-          {current.sourceType === 'TEXT' ? <textarea rows={12} value={current.rawText || ''} disabled={!canEdit} onChange={event => setCurrent({ ...current, rawText: event.target.value })} className="w-full p-3 border rounded font-mono text-sm dark:bg-gray-900 dark:text-white" placeholder="Paste book text here…" /> : <p className="p-4 rounded bg-yellow-50 text-yellow-800">{current.sourceType} extraction is represented but not implemented in Phase 3A. No OCR is performed.</p>}
-          {canEdit && <button disabled={isSaving || current.sourceType !== 'TEXT'} onClick={processText} className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold flex items-center"><FileText size={16} className="mr-2" />Normalize and detect chapters</button>}
+          {current.sourceType === 'TEXT' ? <><textarea rows={12} value={current.rawText || ''} disabled={!canEdit} onChange={event => setCurrent({ ...current, rawText: event.target.value })} className="w-full p-3 border rounded font-mono text-sm dark:bg-gray-900 dark:text-white" placeholder="Paste book text here…" />{canEdit && <button disabled={isSaving} onClick={processText} className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold flex items-center"><FileText size={16} className="mr-2" />Normalize and detect chapters</button>}</> : <div className="space-y-3"><p className="text-sm text-gray-500">{current.sourceType === 'IMAGE' ? 'Upload ordered book-page images (JPG, PNG, WEBP; max 20, 10 MB each).' : 'Upload one scanned PDF (max 25 MB).'} OCR always requires review before publishing.</p>{canEdit && <input type="file" multiple={current.sourceType === 'IMAGE'} accept={current.sourceType === 'IMAGE' ? '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp' : '.pdf,application/pdf'} onChange={event => void uploadFiles(event.target.files)} className="block w-full text-sm" />}{uploadProgress !== null && <p className="text-sm font-bold text-brand-600">Uploading {uploadProgress}%</p>}<ol className="space-y-1 text-sm dark:text-gray-300">{(current.sourceFiles || []).slice().sort((a,b) => a.order-b.order).map((file, index, files) => <li key={file.id} className="flex items-center gap-2"><span>{index + 1}. {file.fileName} — {(file.size / 1024 / 1024).toFixed(1)} MB</span>{canEdit && current.sourceType === 'IMAGE' && <><button disabled={index === 0} onClick={() => setCurrent({ ...current, sourceFiles: files.map((item, itemIndex) => itemIndex === index ? files[index - 1] : itemIndex === index - 1 ? file : item).map((item, order) => ({ ...item, order })) })} className="border px-2 rounded">↑</button><button disabled={index === files.length - 1} onClick={() => setCurrent({ ...current, sourceFiles: files.map((item, itemIndex) => itemIndex === index ? files[index + 1] : itemIndex === index + 1 ? file : item).map((item, order) => ({ ...item, order })) })} className="border px-2 rounded">↓</button><button onClick={() => setCurrent({ ...current, sourceFiles: files.filter(item => item.id !== file.id).map((item, order) => ({ ...item, order })) })} className="text-red-600">Remove</button></>}</li>)}</ol>{canEdit && current.sourceFiles?.length && current.status === 'UPLOADED' && <button onClick={saveSourceOrder} className="px-3 py-2 border rounded font-bold">Save page order</button>}{current.status === 'UPLOADED' && <button disabled={isSaving} onClick={processOcr} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold flex items-center"><FileText size={16} className="mr-2" />Start OCR</button>}{current.status === 'PROCESSING' && <p className="font-bold text-indigo-600">Processing OCR: {current.pagesProcessed || 0} / {current.pagesTotal || '?'} pages ({current.progressPercent || 0}%)</p>}</div>}
         </div>
         <div className="border-t pt-5 dark:border-gray-700 space-y-3">
           <div className="flex justify-between items-center"><div><h3 className="font-bold dark:text-white">Review chapters</h3><p className="text-sm text-gray-500">Rename, reorder, edit, add, or delete before publishing.</p></div>{canEdit && <button onClick={() => setCurrent({ ...current, detectedChapters: [...chapters, { tempId: `chapter-${Date.now()}`, title: 'New chapter', content: '', order: chapters.length }] })} className="px-3 py-2 bg-green-600 text-white rounded font-bold"><Plus size={16} className="inline mr-1" />Add</button>}</div>

@@ -20,5 +20,27 @@ export type ImportChapter = {
   sourceEnd?: number;
 };
 
+export type ImportSourceFile = {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  order: number;
+  uploadedAt?: unknown;
+};
+
+export type OcrStatus = 'NOT_STARTED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export type ExtractedPage = {
+  id: string;
+  pageNumber: number;
+  text: string;
+  confidence?: number;
+  detectedLanguage?: string;
+  // Empty means this is a continuation chunk rather than a new source page.
+  separatorBefore?: string;
+};
+
 export const normalizationVersion = 'text-normalization-v1';
 export const chapterDetectionVersion = 'chapter-detection-v1';

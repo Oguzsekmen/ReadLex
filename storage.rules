@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Browser access is deliberately limited to the one admin upload prefix.
+// All OCR output and all other Storage objects stay server-only.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function admin() { return request.auth != null && request.auth.token.keys().hasAll(['admin']) && request.auth.token.admin == true; }
+    function allowedImage() { return request.resource.contentType.matches('image/(jpeg|png|webp)') && request.resource.size <= 10 * 1024 * 1024; }
+    function allowedPdf() { return request.resource.contentType == 'application/pdf' && request.resource.size <= 25 * 1024 * 1024; }
+    match /book-imports/{importId}/source/{fileName} {
+      allow create: if admin() && fileName.matches('^[A-Za-z0-9_-]+-[^/]{1,255}$') && (allowedImage() || allowedPdf());
+      // Source data is unreviewed content. Only trusted Functions read or delete it.
+      allow read, update, delete: if false;
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
