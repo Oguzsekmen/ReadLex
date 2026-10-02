@@ -348,3 +348,35 @@ Run SRS coverage with:
 npm run test:srs
 npm run test:reviews
 ```
+
+## Learning progress and streaks
+
+Completed vocabulary reviews are the only Phase 5C activity that awards
+learning XP or qualifies for a streak. The callable Function updates the SRS
+record, immutable review event, immutable `users/{uid}/xpEvents/{eventId}`
+record, profile XP/streak fields, and `users/{uid}/learningSummary/overview`
+in one Firestore transaction. Retrying the same `attemptId` returns the
+original event and does not award a second XP event or change summary counts.
+
+The initial XP table is deterministic: `AGAIN` 0, `HARD` 5, `GOOD` 10, and
+`EASY` 12. The daily goal is completed review items. Weak words have
+`strength <= 2`; mastered words have `strength === 5`. New or legacy users
+read safe zero defaults until their first server-verified review.
+
+Streak days use a stable UTC `YYYY-MM-DD` key, calculated on the server from
+the review timestamp. A second qualifying review on the same UTC day leaves
+the streak unchanged; the next UTC day increments it; a gap resets the current
+streak to one while retaining the longest streak. This avoids browser-local
+midnight differences. Reader-progress XP is deliberately deferred rather than
+trusting scroll events.
+
+The dashboard reads only the compact summary document and the server-owned
+profile total; browser rules allow owners to read `learningSummary` and
+`xpEvents` but never write them, XP, streak fields, or aggregate counters. No
+analytics SaaS, AI API, or external gamification provider is used.
+
+```sh
+npm run test:stats
+npm run test:learning-summary
+npm run test:reviews
+```

@@ -20,7 +20,7 @@ import {
   lastFirebaseError
 } from './services/storage';
 import { initializationError } from './services/firebase';
-import { getAuthenticatedProfile, observeAuthState, signOutUser } from './services/auth';
+import { getAuthenticatedProfile, observeAuthState, refreshAuthenticatedProfile, signOutUser } from './services/auth';
 import { t } from './services/i18n';
 import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
@@ -30,6 +30,8 @@ import QuizEngine from './components/QuizEngine';
 import AdminPanel from './components/AdminPanel'; 
 import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookOpen, Loader2, WifiOff, RefreshCw } from 'lucide-react';
 import Library from './components/Library';
+import { LearningSummary } from './components/LearningSummary';
+import { emptyLearningSummary, LearningSummary as LearningSummaryData, loadLearningSummary } from './services/learning/statsService';
 
 // --- Vocabulary Wrapper ---
 const VocabularyWrapper = ({ user, words, onDelete }: { user: User, words: VocabularyWord[], onDelete: (id: string) => void }) => {
@@ -95,6 +97,7 @@ const VocabularyWrapper = ({ user, words, onDelete }: { user: User, words: Vocab
 interface DashboardProps {
   user: User;
   vocabCount: number;
+  vocabulary: VocabularyWord[];
   wordsAddedToday: number;
   onStartQuiz: () => void;
   onUpgradeClick: () => void;
@@ -102,25 +105,28 @@ interface DashboardProps {
   bookProgress: Record<string, UserBookProgress>;
   onContinueBook: (book: Book, autoJump?: boolean) => void;
   onNavigateToLibrary: () => void;
+  learningSummary: LearningSummaryData;
 }
 
 const Dashboard = ({ 
   user, 
   vocabCount, 
+  vocabulary,
   wordsAddedToday, 
   onStartQuiz, 
   onUpgradeClick,
   books,
   bookProgress,
   onContinueBook,
-  onNavigateToLibrary
+  onNavigateToLibrary,
+  learningSummary
 }: DashboardProps) => {
   const lang = user.languagePreference;
   const isTrial = user.subscriptionStatus === 'TRIAL';
   const daysLeft = Math.ceil((user.trialEndsAt - Date.now()) / (1000 * 60 * 60 * 24));
 
   const dailyGoal = user.dailyGoal || 25; 
-  const progressPercent = Math.min(100, (wordsAddedToday / dailyGoal) * 100);
+  const progressPercent = Math.min(100, (learningSummary.reviewedToday / dailyGoal) * 100);
 
   const activeBook = books.find(b => !b.archived && bookProgress[b.id]?.status === 'IN_PROGRESS');
 
@@ -289,14 +295,14 @@ const Dashboard = ({
              {t('dailyGoal', lang)}
           </h2>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-gray-500 dark:text-gray-400 font-bold uppercase text-sm tracking-wide">{t('wordsLearned', lang)} (Today)</span>
-            <span className="font-black text-2xl dark:text-white text-green-500">{wordsAddedToday} <span className="text-gray-300 text-lg">/ {dailyGoal}</span></span>
+            <span className="text-gray-500 dark:text-gray-400 font-bold uppercase text-sm tracking-wide">Bugün tekrar</span>
+            <span className="font-black text-2xl dark:text-white text-green-500">{learningSummary.reviewedToday} <span className="text-gray-300 text-lg">/ {dailyGoal}</span></span>
           </div>
           <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-5 overflow-hidden p-1">
             <div className="bg-green-500 h-full rounded-full transition-all duration-1000 shadow-sm" style={{ width: `${progressPercent}%` }}></div>
           </div>
           <p className="mt-4 text-gray-400 text-sm">
-             {wordsAddedToday >= dailyGoal ? `Goal Reached! Tomorrow's goal: ${dailyGoal + 5}` : "Read books and save words to reach your goal."}
+             {learningSummary.reviewedToday >= dailyGoal ? 'Günlük tekrar hedefi tamamlandı!' : 'Hedefe ulaşmak için planlı tekrarlarını tamamla.'}
           </p>
         </div>
 
@@ -323,6 +329,7 @@ const Dashboard = ({
           </button>
         </div>
       </div>
+      <LearningSummary summary={learningSummary} dailyGoal={dailyGoal} vocabulary={vocabulary} />
     </div>
   );
 };
@@ -347,6 +354,7 @@ const App = () => {
   const [savedWords, setSavedWords] = useState<VocabularyWord[]>([]);
   const [bookProgress, setBookProgress] = useState<Record<string, UserBookProgress>>({});
   const [plans, setPlans] = useState<PlanConfig[]>([]);
+  const [learningSummary, setLearningSummary] = useState<LearningSummaryData>(emptyLearningSummary);
 
   // Initialization
   useEffect(() => {
@@ -473,6 +481,13 @@ const App = () => {
       loadUserData();
     }
   }, [user, currentPage]); 
+
+  useEffect(() => {
+    let active = true;
+    if (!user) { setLearningSummary(emptyLearningSummary); return; }
+    void loadLearningSummary(user.id).then(summary => { if (active) setLearningSummary(summary); }).catch(() => { if (active) setLearningSummary(emptyLearningSummary); });
+    return () => { active = false; };
+  }, [user?.id, currentPage]);
 
   const handleLogout = async () => {
     setUser(null);
@@ -639,12 +654,12 @@ const App = () => {
     setIsQuizActive(true);
   };
 
-  const handleQuizComplete = (result: QuizResult) => {
-    if (!user) return;
-    const newXp = user.xp + (result.score * 10);
-    const updatedUser = { ...user, xp: newXp };
-    setUser(updatedUser);
+  const handleQuizComplete = (_result: QuizResult) => {
     setIsQuizActive(false);
+    // XP and streaks are changed only by submitVocabularyReview on the server.
+    // Refreshing reads those authoritative aggregates without trusting quiz score.
+    void refreshAuthenticatedProfile().then(setUser).catch(() => undefined);
+    if (user) void loadLearningSummary(user.id).then(setLearningSummary).catch(() => undefined);
   };
 
   const handleUpgrade = (plan: PlanType) => {
@@ -738,6 +753,7 @@ const App = () => {
           <Dashboard 
             user={user} 
             vocabCount={savedWords.length} 
+            vocabulary={savedWords}
             wordsAddedToday={getDailyWordCount()} 
             onStartQuiz={handleStartQuiz} 
             onUpgradeClick={() => setCurrentPage('pricing')} 
@@ -745,6 +761,7 @@ const App = () => {
             bookProgress={bookProgress}
             onContinueBook={handleSelectBook}
             onNavigateToLibrary={() => setCurrentPage('library')}
+            learningSummary={learningSummary}
           />
         );
       case 'library':
@@ -763,6 +780,7 @@ const App = () => {
           <Dashboard 
             user={user} 
             vocabCount={savedWords.length} 
+            vocabulary={savedWords}
             wordsAddedToday={getDailyWordCount()} 
             onStartQuiz={handleStartQuiz} 
             onUpgradeClick={() => setCurrentPage('pricing')} 
@@ -770,6 +788,7 @@ const App = () => {
             bookProgress={bookProgress}
             onContinueBook={handleSelectBook}
             onNavigateToLibrary={() => setCurrentPage('library')}
+            learningSummary={learningSummary}
           />
         );
     }

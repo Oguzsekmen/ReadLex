@@ -72,6 +72,8 @@ service cloud.firestore {
         allow read: if owns(uid);
         allow write: if false;
       }
+      match /xpEvents/{eventId} { allow read: if owns(uid); allow write: if false; }
+      match /learningSummary/{summaryId} { allow read: if owns(uid); allow write: if false; }
 
       // Only trusted migration tooling may mark a compatibility copy complete.
       match /migrationState/{stateId} {

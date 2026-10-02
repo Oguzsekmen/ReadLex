@@ -36,6 +36,8 @@ test('profiles allow only safe own creation and updates', async () => {
   await assertFails(updateDoc(doc(alice, 'users/alice'), { role: 'ADMIN' }));
   await assertFails(updateDoc(doc(alice, 'users/alice'), { subscriptionStatus: 'PAST_DUE' }));
   await assertFails(updateDoc(doc(alice, 'users/alice'), { plan: 'PREMIUM' }));
+  await assertFails(updateDoc(doc(alice, 'users/alice'), { xp: 9999 }));
+  await assertFails(updateDoc(doc(alice, 'users/alice'), { streak: 999 }));
   await assertFails(updateDoc(doc(alice, 'users/alice'), { providerId: 'forged-provider' }));
   await assertFails(getDoc(doc(userDb('bob'), 'users/alice')));
   await assertFails(updateDoc(doc(userDb('bob'), 'users/alice'), { name: 'Forged' }));
@@ -66,11 +68,21 @@ test('progress is owned by the path UID only', async () => {
   await assertFails(setDoc(doc(anonDb(), 'users/alice/progress/book-1'), { bookId: 'book-1' }));
 });
 
-test('review events are owner-readable and client-write denied', async () => {
-  await testEnv.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), 'users/alice/reviewEvents/event-1'), { action: 'fixture' }));
+test('review, XP and summary records are owner-readable and client-write denied', async () => {
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const database = context.firestore();
+    await setDoc(doc(database, 'users/alice/reviewEvents/event-1'), { action: 'fixture' });
+    await setDoc(doc(database, 'users/alice/learningSummary/overview'), { totalXp: 10 });
+    await setDoc(doc(database, 'users/alice/xpEvents/review-1'), { amount: 10 });
+  });
   await assertSucceeds(getDoc(doc(userDb('alice'), 'users/alice/reviewEvents/event-1')));
   await assertFails(setDoc(doc(userDb('alice'), 'users/alice/reviewEvents/event-2'), { action: 'forged' }));
   await assertFails(getDoc(doc(userDb('bob'), 'users/alice/reviewEvents/event-1')));
+  await assertSucceeds(getDoc(doc(userDb('alice'), 'users/alice/learningSummary/overview')));
+  await assertSucceeds(getDoc(doc(userDb('alice'), 'users/alice/xpEvents/review-1')));
+  await assertFails(setDoc(doc(userDb('alice'), 'users/alice/learningSummary/overview'), { totalXp: 999 }));
+  await assertFails(setDoc(doc(userDb('alice'), 'users/alice/xpEvents/forged'), { amount: 999 }));
+  await assertFails(getDoc(doc(userDb('bob'), 'users/alice/learningSummary/overview')));
 });
 
 test('migration completion state is owner-readable and server-only', async () => {
