@@ -72,7 +72,7 @@ export const getWordDefinition = async (word: string, contextSentence: string): 
         meanings: [{ 
           partOfSpeech: "Kelime", 
           translation: "...", 
-          definition: "Bağlantı sorunu.", 
+          definition: "Çeviri hizmeti güvenli sunucu yapılandırması bekliyor.",
           example: contextSentence 
         }]
       };

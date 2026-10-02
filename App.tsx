@@ -14,14 +14,11 @@ import {
   saveUserProgress, 
   saveUser,
   getPlans,
-  saveSession,
-  getSession,
-  clearSession,
-  getUserById,
   isUsingFirebase,
   lastFirebaseError
 } from './services/storage';
 import { initializationError } from './services/firebase';
+import { getAuthenticatedProfile, observeAuthState, signOutUser } from './services/auth';
 import { t } from './services/i18n';
 import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
@@ -329,7 +326,7 @@ const Dashboard = ({
 
 // --- Main App Component ---
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authStatus, setAuthStatus] = useState<'AUTH_LOADING' | 'AUTHENTICATED' | 'UNAUTHENTICATED'>('AUTH_LOADING');
   const [user, setUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState('dashboard');
   
@@ -359,14 +356,6 @@ const App = () => {
         const loadedPlans = await getPlans();
         setPlans(loadedPlans);
 
-        const sessId = getSession();
-        if (sessId) {
-          const restoredUser = await getUserById(sessId);
-          if (restoredUser) {
-            setUser(restoredUser);
-            setIsAuthenticated(true);
-          }
-        }
       } catch (e) {
         console.error("Initialization error:", e);
       } finally {
@@ -374,6 +363,41 @@ const App = () => {
       }
     };
     init();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = observeAuthState(async firebaseUser => {
+      if (!firebaseUser) {
+        if (!active) return;
+        setUser(null);
+        setSavedWords([]);
+        setBookProgress({});
+        setSelectedBook(null);
+        setActiveChapterIndex(null);
+        setCurrentPage('dashboard');
+        setAuthStatus('UNAUTHENTICATED');
+        return;
+      }
+
+      setAuthStatus('AUTH_LOADING');
+      try {
+        const profile = await getAuthenticatedProfile(firebaseUser);
+        if (!active) return;
+        setUser(profile);
+        setAuthStatus('AUTHENTICATED');
+      } catch (error) {
+        console.error('Unable to load Firebase user profile:', error);
+        if (!active) return;
+        setUser(null);
+        setAuthStatus('UNAUTHENTICATED');
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -415,7 +439,6 @@ const App = () => {
            trialEndsAt: 0 
          };
          setUser(downgradedUser);
-         saveUser(downgradedUser);
          alert("Your trial period has ended. You have been downgraded to the Free plan.");
       }
     } else if (user && user.subscriptionStatus === 'ACTIVE' && user.plan !== 'FREE' && user.subscriptionEndsAt) {
@@ -427,7 +450,6 @@ const App = () => {
            subscriptionEndsAt: 0 
          };
          setUser(downgradedUser);
-         saveUser(downgradedUser);
          alert("Your subscription has expired. You have been downgraded to the Free plan.");
        }
     }
@@ -449,19 +471,19 @@ const App = () => {
     }
   }, [user, currentPage]); 
 
-  const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser);
-    setIsAuthenticated(true);
-    saveSession(loggedInUser.id);
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
     setUser(null);
+    setAuthStatus('UNAUTHENTICATED');
+    setSavedWords([]);
+    setBookProgress({});
     setSelectedBook(null);
     setActiveChapterIndex(null);
     setCurrentPage('dashboard');
-    clearSession();
+    try {
+      await signOutUser();
+    } catch (error) {
+      console.error('Firebase sign-out failed:', error);
+    }
   };
 
   const handleUpdateUser = (updatedUser: User) => {
@@ -615,25 +637,15 @@ const App = () => {
     const newXp = user.xp + (result.score * 10);
     const updatedUser = { ...user, xp: newXp };
     setUser(updatedUser);
-    saveUser(updatedUser);
     setIsQuizActive(false);
   };
 
   const handleUpgrade = (plan: PlanType) => {
     if(!user) return;
     
-    const planConfig = plans.find(p => p.id === plan);
-    const durationDays = planConfig ? planConfig.durationDays : (plan === 'YEARLY' ? 365 : 30);
-
-    const updatedUser: User = {
-      ...user,
-      subscriptionStatus: 'ACTIVE',
-      plan: plan,
-      subscriptionEndsAt: Date.now() + durationDays * 24 * 60 * 60 * 1000
-    };
-    handleUpdateUser(updatedUser);
-    setCurrentPage('dashboard');
-    alert("Payment Successful! Welcome to ReadLex PRO.");
+    // Subscription entitlements require a verified server-side payment flow.
+    // Never let browser UI grant a plan or write subscription fields.
+    alert("Subscription activation is not available yet. No payment or plan change was made.");
   };
 
   const getDailyWordCountInternal = (currentWords: VocabularyWord[]) => {
@@ -651,7 +663,7 @@ const App = () => {
     return getDailyWordCountInternal(savedWords);
   }
 
-  if (isLoading) {
+  if (isLoading || authStatus === 'AUTH_LOADING') {
       return (
           <div className="h-screen w-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
              <Loader2 size={48} className="text-brand-600 animate-spin mb-4" />
@@ -660,10 +672,10 @@ const App = () => {
       );
   }
 
-  if (!isAuthenticated || !user) {
+  if (authStatus !== 'AUTHENTICATED' || !user) {
     return (
       <div className={isDarkMode ? 'dark' : ''}>
-         <Auth onLogin={handleLogin} />
+         <Auth />
       </div>
     );
   }

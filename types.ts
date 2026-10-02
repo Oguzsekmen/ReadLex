@@ -11,7 +11,6 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  password?: string; 
   avatarUrl?: string; 
   languagePreference: 'TR' | 'EN';
   role: UserRole;
@@ -27,6 +26,8 @@ export interface User {
   plan: PlanType;
   trialEndsAt: number; 
   subscriptionEndsAt?: number; 
+  // Derived from Firebase Auth at runtime; never persisted in the user profile.
+  emailVerified?: boolean;
 }
 
 export interface Chapter {

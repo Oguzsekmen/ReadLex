@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { User as UserIcon, Mail, Settings, Shield, Clock, Crown, Edit2, X } from 'lucide-react';
+import { User as UserIcon, Mail, Clock, Crown, Edit2, X } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface ProfileProps {
@@ -25,7 +25,6 @@ const AVATAR_OPTIONS = [
 
 const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
   const [name, setName] = useState(user.name);
-  const [newPassword, setNewPassword] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(user.avatarUrl || AVATAR_OPTIONS[0]);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -50,13 +49,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
         avatarUrl: selectedAvatar 
     };
     
-    // Only update password if user typed something
-    if (newPassword && newPassword.trim().length > 0) {
-      updatedUser.password = newPassword.trim();
-    }
-
     onUpdate(updatedUser);
-    setNewPassword(''); // Clear the password field after saving
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
@@ -221,25 +214,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
               />
             </div>
-          </div>
-
-          <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
-              <Shield size={20} className="mr-2 text-brand-500" />
-              {t('security', lang)}
-            </h3>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('changePassword', lang)}</label>
-            <div className="relative">
-              <Settings className="absolute left-3 top-3 text-gray-400" size={20} />
-              <input
-                type="password"
-                placeholder={lang === 'TR' ? "Değiştirmek için yeni şifre girin" : "Enter new password to change"}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
-              />
-            </div>
-            <p className="text-xs text-gray-500">{lang === 'TR' ? "Değiştirmek istemiyorsanız boş bırakın." : "Leave blank if you don't want to change it."}</p>
           </div>
 
           <div className="pt-4 flex items-center gap-4">

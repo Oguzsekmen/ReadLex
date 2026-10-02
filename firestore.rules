@@ -1,0 +1,74 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Reserved for a future privileged Admin SDK/Functions claim assignment.
+    // No rule below grants writes based on this claim in this phase.
+    function hasAdminClaim() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'id', 'email', 'name', 'avatarUrl', 'languagePreference', 'role',
+          'streak', 'xp', 'dailyGoal', 'lastVisitDate', 'subscriptionStatus',
+          'plan', 'trialEndsAt', 'subscriptionEndsAt', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == 'USER'
+        && request.resource.data.streak == 0
+        && request.resource.data.xp == 0
+        && request.resource.data.subscriptionStatus == 'ACTIVE'
+        && request.resource.data.plan == 'FREE'
+        && request.resource.data.trialEndsAt == 0
+        && request.resource.data.subscriptionEndsAt == 0;
+      allow update: if owns(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'avatarUrl', 'languagePreference', 'dailyGoal', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /books/{bookId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /plans/{planId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Current client documents are keyed by the Firebase Auth UID. A later
+    // data-model migration may move these to user subcollections.
+    match /vocabulary/{uid} {
+      allow read, write: if owns(uid);
+    }
+
+    match /progress/{uid} {
+      allow read, write: if owns(uid);
+    }
+
+    // The browser may consume centrally managed dictionary cache entries, but
+    // never publish global cache data as an authoritative client writer.
+    match /dictionary_cache/{entryId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

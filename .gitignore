@@ -1,0 +1,43 @@
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+
+# Environment files (commit only the documented example)
+.env
+.env.*
+!.env.example
+migrated_prompt_history/
+
+# Firebase local tooling and emulators
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Capacitor/native build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+ios/App/build/
+ios/App/Pods/
+ios/DerivedData/
+
+# Test output, logs, and temporary files
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml

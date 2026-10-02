@@ -209,7 +209,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   // --- User Handlers ---
   const handleEditUser = (u?: User) => {
     setTargetUser(u || {
-      id: '', name: '', email: '', role: 'USER', password: '', plan: 'FREE', subscriptionStatus: 'ACTIVE'
+      id: '', name: '', email: '', role: 'USER', plan: 'FREE', subscriptionStatus: 'ACTIVE'
     });
     setIsEditingUser(true);
   };
@@ -236,9 +236,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       id: targetUser.id || 'u-' + Date.now(),
       email: targetUser.email!,
       name: targetUser.name!,
-      // Ensure password isn't lost if input was cleared by accident
-      password: targetUser.password || '123456',
-      role: (targetUser.role as any) || 'USER',
+      // Roles are server-managed in Phase 1B; this legacy browser panel cannot
+      // create or grant privileged users.
+      role: 'USER',
       languagePreference: targetUser.languagePreference || 'TR',
       streak: targetUser.streak || 0,
       xp: targetUser.xp || 0,
@@ -592,16 +592,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
                     <label className="block text-sm font-bold text-gray-500 mb-1">{t('displayName', lang)}</label>
                     <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={targetUser.name || ''} onChange={e => setTargetUser({...targetUser, name: e.target.value})} />
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('password', lang)}</label>
-                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={targetUser.password || ''} onChange={e => setTargetUser({...targetUser, password: e.target.value})} placeholder={targetUser.id ? "Leave blank to keep same" : "Required"} />
-                  </div>
                    <div>
                    <label className="block text-sm font-bold text-gray-500 mb-1">{t('role', lang)}</label>
-                   <select className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={targetUser.role || 'USER'} onChange={e => setTargetUser({...targetUser, role: e.target.value as any})}>
-                      <option value="USER">USER</option>
-                      <option value="ADMIN">ADMIN</option>
-                   </select>
+                    <input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={targetUser.role || 'USER'} readOnly />
                  </div>
                  
                  <div className="col-span-full border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">

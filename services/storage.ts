@@ -1,6 +1,7 @@
 import { Book, User, VocabularyWord, BookStatus, PlanConfig, DefinitionResponse, UserBookProgress } from '../types';
 import { MOCK_BOOKS, DEFAULT_PLANS } from './data';
 import { db } from './firebase';
+import { User as FirebaseUser } from 'firebase/auth';
 import { 
   collection, 
   doc, 
@@ -8,8 +9,6 @@ import {
   getDocs, 
   setDoc, 
   deleteDoc, 
-  query, 
-  where, 
   writeBatch 
 } from 'firebase/firestore';
 
@@ -31,8 +30,6 @@ const LOCAL_KEYS = {
   GLOBAL_DICT: 'readlex_global_dict'
 };
 
-const SESSION_KEY = 'readlex_session_uid';
-
 export let lastFirebaseError: string | null = null;
 
 export const isUsingFirebase = (): boolean => {
@@ -40,6 +37,25 @@ export const isUsingFirebase = (): boolean => {
 };
 
 const isFirebaseReady = () => !!db;
+
+// A profile document is not authorization data. UI roles are derived from an
+// ID-token custom claim in services/auth.ts.
+const normalizeBrowserUser = (user: Partial<User>, id?: string): User => ({
+  id: id || user.id || '',
+  email: user.email || '',
+  name: user.name || 'ReadLex User',
+  avatarUrl: user.avatarUrl,
+  languagePreference: user.languagePreference === 'EN' ? 'EN' : 'TR',
+  role: 'USER',
+  streak: typeof user.streak === 'number' ? user.streak : 0,
+  xp: typeof user.xp === 'number' ? user.xp : 0,
+  dailyGoal: typeof user.dailyGoal === 'number' ? user.dailyGoal : 25,
+  lastVisitDate: typeof user.lastVisitDate === 'number' ? user.lastVisitDate : Date.now(),
+  subscriptionStatus: user.subscriptionStatus || 'ACTIVE',
+  plan: user.plan || 'FREE',
+  trialEndsAt: typeof user.trialEndsAt === 'number' ? user.trialEndsAt : 0,
+  subscriptionEndsAt: typeof user.subscriptionEndsAt === 'number' ? user.subscriptionEndsAt : 0
+});
 
 async function withFallback<T>(
     firebaseOp: () => Promise<T>,
@@ -91,44 +107,6 @@ export const saveDefinitionToCache = async (word: string, definition: Definition
 // --- Existing Storage Logic ---
 
 export const initStorage = async () => {
-  const adminUser: User = {
-    id: 'admin-oguz',
-    email: 'oguzsekmen@readlex.com',
-    name: 'Oguz Sekmen',
-    password: 'Oguzsekmen', 
-    avatarUrl: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Oguz',
-    languagePreference: 'TR',
-    role: 'ADMIN',
-    streak: 999,
-    xp: 99999,
-    dailyGoal: 50,
-    lastVisitDate: Date.now(),
-    subscriptionStatus: 'ACTIVE',
-    plan: 'YEARLY', 
-    trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-    subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
-  };
-
-  const devAdmin: User = {
-    id: 'admin-dev',
-    email: 'a',
-    name: 'Dev Admin',
-    password: 'a',
-    avatarUrl: 'https://api.dicebear.com/9.x/bottts/svg?seed=Admin',
-    languagePreference: 'TR',
-    role: 'ADMIN',
-    streak: 100,
-    xp: 5000,
-    dailyGoal: 20,
-    lastVisitDate: Date.now(),
-    subscriptionStatus: 'ACTIVE',
-    plan: 'YEARLY',
-    trialEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-    subscriptionEndsAt: Date.now() + 365 * 24 * 60 * 60 * 1000
-  };
-
-  const defaultUsers = [adminUser, devAdmin];
-
   const seedLocal = () => {
       if (!localStorage.getItem(LOCAL_KEYS.BOOKS)) {
           localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(MOCK_BOOKS));
@@ -136,15 +114,6 @@ export const initStorage = async () => {
       if (!localStorage.getItem(LOCAL_KEYS.PLANS)) {
           localStorage.setItem(LOCAL_KEYS.PLANS, JSON.stringify(DEFAULT_PLANS));
       }
-      const usersStr = localStorage.getItem(LOCAL_KEYS.USERS);
-      let localUsers: User[] = usersStr ? JSON.parse(usersStr) : [];
-      
-      defaultUsers.forEach(defUser => {
-        if (!localUsers.find(u => u.email.toLowerCase() === defUser.email.toLowerCase())) {
-            localUsers.push(defUser);
-        }
-      });
-      localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(localUsers));
   };
 
   await withFallback(
@@ -161,14 +130,6 @@ export const initStorage = async () => {
                 await setDoc(doc(db!, PLANS_COL, plan.id), plan);
             }
         }
-        
-        for (const defUser of defaultUsers) {
-            const q = query(collection(db!, USERS_COL), where('email', '==', defUser.email));
-            const adminQuery = await getDocs(q);
-            if (adminQuery.empty) {
-                await setDoc(doc(db!, USERS_COL, defUser.id), defUser);
-            }
-        }
       },
       seedLocal
   );
@@ -178,80 +139,76 @@ export const getUsers = async (): Promise<User[]> => {
   return withFallback(
       async () => {
           const snapshot = await getDocs(collection(db!, USERS_COL));
-          return snapshot.docs.map(d => d.data() as User);
+          return snapshot.docs.map(d => normalizeBrowserUser(d.data() as User, d.id));
       },
       () => {
           const usersStr = localStorage.getItem(LOCAL_KEYS.USERS);
-          return usersStr ? JSON.parse(usersStr) : [];
+          const users: User[] = usersStr ? JSON.parse(usersStr) : [];
+          return users.map(user => normalizeBrowserUser(user));
       }
   );
 };
 
 export const saveUser = async (user: User) => {
-  const normalizedUser = { ...user, email: user.email.toLowerCase().trim() };
-  return withFallback(
-      async () => await setDoc(doc(db!, USERS_COL, normalizedUser.id), normalizedUser),
-      async () => {
-          const users = await getUsers();
-          const index = users.findIndex(u => u.id === normalizedUser.id);
-          if (index >= 0) users[index] = normalizedUser;
-          else users.push(normalizedUser);
-          localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(users));
-      }
-  );
+  // Browser profile updates are intentionally allow-listed. Sensitive account,
+  // subscription, role, XP, and streak fields cannot be written by this path.
+  const safeFields = {
+    name: user.name.trim(),
+    avatarUrl: user.avatarUrl || '',
+    languagePreference: user.languagePreference,
+    dailyGoal: user.dailyGoal,
+    updatedAt: Date.now()
+  };
+  if (!db) throw new Error('Firebase profile storage is unavailable.');
+  return setDoc(doc(db, USERS_COL, user.id), safeFields, { merge: true });
 };
 
 export const deleteUser = async (userId: string) => {
-    return withFallback(
-        async () => await deleteDoc(doc(db!, USERS_COL, userId)),
-        async () => {
-            const users = await getUsers();
-            const filtered = users.filter(u => u.id !== userId);
-            localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(filtered));
-        }
-    );
+    if (!db) throw new Error('Admin mutations require a secured server backend.');
+    return deleteDoc(doc(db, USERS_COL, userId));
 };
 
-export const getUserByEmail = async (email: string): Promise<User | undefined> => {
-    const normalizedEmail = email.toLowerCase().trim();
-    return withFallback(
-        async () => {
-            const q = query(collection(db!, USERS_COL), where("email", "==", normalizedEmail));
-            const snapshot = await getDocs(q);
-            if (snapshot.empty) return undefined;
-            return snapshot.docs[0].data() as User;
-        },
-        async () => {
-            const users = await getUsers();
-            return users.find(u => u.email.toLowerCase() === normalizedEmail);
-        }
-    );
-};
+export const loadOrCreateUserProfile = async (firebaseUser: FirebaseUser): Promise<User> => {
+  if (!db) throw new Error('auth/profile-storage-unavailable');
+  const ref = doc(db, USERS_COL, firebaseUser.uid);
+  const snapshot = await getDoc(ref);
+  if (snapshot.exists()) {
+    const existing = normalizeBrowserUser(snapshot.data() as User, firebaseUser.uid);
+    // Auth creation can notify the observer before updateProfile completes.
+    // Repair only safe display fields when that race produced the placeholder.
+    if (existing.name === 'ReadLex User' && firebaseUser.displayName) {
+      const safeDisplayFields = {
+        name: firebaseUser.displayName,
+        avatarUrl: firebaseUser.photoURL || existing.avatarUrl || '',
+        updatedAt: Date.now()
+      };
+      await setDoc(ref, safeDisplayFields, { merge: true });
+      return { ...existing, ...safeDisplayFields };
+    }
+    return existing;
+  }
 
-export const getUserById = async (id: string): Promise<User | undefined> => {
-    return withFallback(
-        async () => {
-            const docRef = doc(db!, USERS_COL, id);
-            const docSnap = await getDoc(docRef);
-            return docSnap.exists() ? (docSnap.data() as User) : undefined;
-        },
-        async () => {
-            const users = await getUsers();
-            return users.find(u => u.id === id);
-        }
-    );
-};
-
-export const saveSession = (userId: string) => {
-  localStorage.setItem(SESSION_KEY, userId);
-};
-
-export const getSession = (): string | null => {
-  return localStorage.getItem(SESSION_KEY);
-};
-
-export const clearSession = () => {
-  localStorage.removeItem(SESSION_KEY);
+  const now = Date.now();
+  const created: User = {
+    id: firebaseUser.uid,
+    email: firebaseUser.email?.toLowerCase().trim() || '',
+    name: firebaseUser.displayName || 'ReadLex User',
+    avatarUrl: firebaseUser.photoURL || '',
+    languagePreference: 'TR',
+    role: 'USER',
+    streak: 0,
+    xp: 0,
+    dailyGoal: 25,
+    lastVisitDate: now,
+    subscriptionStatus: 'ACTIVE',
+    plan: 'FREE',
+    trialEndsAt: 0,
+    subscriptionEndsAt: 0
+  };
+  // setDoc is idempotent for the same canonical UID; a concurrent observer
+  // can only create the same safe baseline document.
+  await setDoc(ref, { ...created, createdAt: now, updatedAt: now });
+  return created;
 };
 
 export const getBooks = async (): Promise<Book[]> => {
@@ -268,27 +225,13 @@ export const getBooks = async (): Promise<Book[]> => {
 };
 
 export const saveBook = async (book: Book) => {
-    return withFallback(
-        async () => await setDoc(doc(db!, BOOKS_COL, book.id), book),
-        async () => {
-            const books = await getBooks();
-            const index = books.findIndex(b => b.id === book.id);
-            if (index >= 0) books[index] = book;
-            else books.push(book);
-            localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(books));
-        }
-    );
+    if (!db) throw new Error('Admin mutations require a secured server backend.');
+    return setDoc(doc(db, BOOKS_COL, book.id), book);
 };
 
 export const deleteBook = async (bookId: string) => {
-    return withFallback(
-        async () => await deleteDoc(doc(db!, BOOKS_COL, bookId)),
-        async () => {
-            const books = await getBooks();
-            const filtered = books.filter(b => b.id !== bookId);
-            localStorage.setItem(LOCAL_KEYS.BOOKS, JSON.stringify(filtered));
-        }
-    );
+    if (!db) throw new Error('Admin mutations require a secured server backend.');
+    return deleteDoc(doc(db, BOOKS_COL, bookId));
 };
 
 export const getPlans = async (): Promise<PlanConfig[]> => {
@@ -306,19 +249,13 @@ export const getPlans = async (): Promise<PlanConfig[]> => {
 };
 
 export const savePlans = async (plans: PlanConfig[]) => {
-    return withFallback(
-        async () => {
-            const batch = writeBatch(db!);
-            for (const plan of plans) {
-                const ref = doc(db!, PLANS_COL, plan.id);
-                batch.set(ref, plan);
-            }
-            await batch.commit();
-        },
-        () => {
-            localStorage.setItem(LOCAL_KEYS.PLANS, JSON.stringify(plans));
-        }
-    );
+    if (!db) throw new Error('Admin mutations require a secured server backend.');
+    const batch = writeBatch(db);
+    for (const plan of plans) {
+        const ref = doc(db, PLANS_COL, plan.id);
+        batch.set(ref, plan);
+    }
+    return batch.commit();
 };
 
 export const getUserVocab = async (userId: string): Promise<VocabularyWord[]> => {

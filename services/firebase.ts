@@ -3,15 +3,17 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
 import { getAnalytics, Analytics } from 'firebase/analytics';
 
-// Configuration provided by user
+// Firebase web configuration is intentionally browser-visible. It is not a
+// provider secret, but the Web API key must be restricted in Google Cloud and
+// all data access must be enforced by Firestore Security Rules.
 const firebaseConfig = {
-  apiKey: "AIzaSyBIsMET8iCQWTlr_CSoD98PC6Zr3_xIuSg",
-  authDomain: "readlex-app-c1912.firebaseapp.com",
-  projectId: "readlex-app-c1912",
-  storageBucket: "readlex-app-c1912.firebasestorage.app",
-  messagingSenderId: "301728087460",
-  appId: "1:301728087460:web:8fe220800b79f0a876d531",
-  measurementId: "G-CVP8LFCSWE"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
 };
 
 // Initialize Firebase variables
@@ -24,12 +26,25 @@ let initializationError: string | null = null;
 
 try {
     if (typeof window !== 'undefined') {
+        const hasRequiredConfig = Boolean(
+          firebaseConfig.apiKey &&
+          firebaseConfig.authDomain &&
+          firebaseConfig.projectId &&
+          firebaseConfig.appId
+        );
+
+        if (!hasRequiredConfig) {
+          initializationError = 'Firebase web configuration is missing. Copy .env.example to .env.local and provide only the public Firebase web configuration.';
+        }
+
         // Initialize App
         try {
-            if (!getApps().length) {
-                app = initializeApp(firebaseConfig);
-            } else {
-                app = getApp();
+            if (hasRequiredConfig) {
+                if (!getApps().length) {
+                    app = initializeApp(firebaseConfig);
+                } else {
+                    app = getApp();
+                }
             }
         } catch (appError: any) {
             console.error("Firebase App init failed:", appError);
