@@ -148,6 +148,7 @@ export interface UserBookProgress {
   lastReadAt: Date;
   currentChapterId?: string;
   progressPercent?: number;
+  chapterContentHash?: string;
   completedAt?: Date;
 }
 

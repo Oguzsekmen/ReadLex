@@ -24,6 +24,7 @@ import { getAuthenticatedProfile, observeAuthState, signOutUser } from './servic
 import { t } from './services/i18n';
 import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
+import { ReaderProgressUpdate } from './services/readerEngine';
 import ChapterList from './components/ChapterList'; 
 import QuizEngine from './components/QuizEngine';
 import AdminPanel from './components/AdminPanel'; 
@@ -607,10 +608,9 @@ const App = () => {
   };
 
   // NEW: Handle granular word progress updates
-  const handleUpdateWordProgress = (bookId: string, chapterIndex: number, wordIndex: number) => {
+  const handleUpdateWordProgress = (bookId: string, chapterIndex: number, update: ReaderProgressUpdate) => {
     if (!user) return;
-    const currentProgress = bookProgress[bookId];
-    if (!currentProgress) return;
+    const currentProgress = bookProgress[bookId] || { bookId, status: 'IN_PROGRESS' as const, currentChapterIndex: chapterIndex, lastWordIndex: 0, lastReadAt: new Date() };
 
     // Only update if it's the current chapter or a later one (safety check)
     if (chapterIndex < currentProgress.currentChapterIndex) return;
@@ -618,7 +618,10 @@ const App = () => {
     const newProgressEntry: UserBookProgress = {
       ...currentProgress,
       currentChapterIndex: chapterIndex,
-      lastWordIndex: wordIndex,
+      currentChapterId: update.chapterId,
+      chapterContentHash: update.chapterContentHash,
+      lastWordIndex: update.tokenIndex,
+      progressPercent: update.scrollPercent,
       lastReadAt: new Date()
     };
 
@@ -709,12 +712,7 @@ const App = () => {
                 <BookReader 
                   book={selectedBook} 
                   initialChapterIndex={activeChapterIndex}
-                  // Pass the saved word index if it exists for this chapter
-                  initialWordIndex={
-                    (bookProgress[selectedBook.id] && bookProgress[selectedBook.id].currentChapterIndex === activeChapterIndex)
-                      ? (bookProgress[selectedBook.id].lastWordIndex || 0) 
-                      : 0
-                  }
+                  initialProgress={bookProgress[selectedBook.id]}
                   onBack={() => setActiveChapterIndex(null)} 
                   onSaveWord={handleSaveWord}
                   savedWords={savedWords}

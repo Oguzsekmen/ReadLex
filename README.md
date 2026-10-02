@@ -288,6 +288,36 @@ Reader integration coverage:
 npm run test:reader
 ```
 
+## Reader Engine V2
+
+The reader keeps rendering, language selection, scrolling, and progress
+persistence as separate concerns. Prepared tokens remain the authoritative
+rendering source for completed language chapters; legacy chapters retain the
+safe local fallback and remain readable. Prepared token blocks preserve
+punctuation and paragraph boundaries, and the reader initially renders a
+bounded number of blocks before offering an incremental “load more” control
+for long chapters.
+
+Progress is stored in the existing `users/{uid}/progress/{bookId}` document.
+It records the current chapter, chapter content hash, approximate token index,
+scroll percentage, and last-read timestamp. Local scroll updates are batched:
+only meaningful changes are saved after a five-second debounce, with a flush
+on chapter navigation and when the page becomes hidden. This prevents a
+continuous two-minute scroll from producing hundreds of Firestore writes.
+
+Resume uses a saved token only when its chapter content hash still matches;
+otherwise it falls back to the saved scroll position. The reader also exposes
+stable token and sentence anchors through `scrollToToken` and
+`scrollToSentence`, tracks user versus programmatic scrolling, and maintains
+`activeTokenIndex` / `activeSentenceId` as foundations for the future Phase 4B
+read-along feature. No audio is implemented by this layer.
+
+Reader-engine coverage:
+
+```sh
+npm run test:reader-engine
+```
+
 Run the import coverage with:
 
 ```sh

@@ -10,6 +10,7 @@ const fromProgress = (id: string, data: Record<string, unknown>): UserBookProgre
   currentChapterId: typeof data.currentChapterId === 'string' ? data.currentChapterId : undefined,
   lastWordIndex: typeof data.lastWordIndex === 'number' ? data.lastWordIndex : 0,
   progressPercent: typeof data.progressPercent === 'number' ? data.progressPercent : undefined,
+  chapterContentHash: typeof data.chapterContentHash === 'string' ? data.chapterContentHash : undefined,
   lastReadAt: toDate(data.lastReadAt)
 });
 
