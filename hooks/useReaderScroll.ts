@@ -10,5 +10,6 @@ export const useReaderScroll = (articleRef: RefObject<HTMLElement>) => {
     if (!element) return false; markProgrammatic(); element.scrollIntoView({ behavior, block: 'center', inline: 'nearest' }); return true;
   }, [articleRef]);
   useEffect(() => { const onScroll = () => { if (Date.now() > programmaticUntil.current) setUserHasScrolled(true); }; window.addEventListener('scroll', onScroll, { passive: true }); return () => window.removeEventListener('scroll', onScroll); }, []);
-  return { scrollToToken, scrollToSentence, userHasScrolled, resetUserScroll: () => setUserHasScrolled(false), articleRef };
+  const resetUserScroll = useCallback(() => setUserHasScrolled(false), []);
+  return { scrollToToken, scrollToSentence, userHasScrolled, resetUserScroll, articleRef };
 };
