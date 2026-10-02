@@ -156,6 +156,7 @@ project or browser environment variables.
 npm run test:compatibility
 npm run test:rules
 npm run test:migrations
+npm run test:imports
 npm run test:emulator
 ```
 
@@ -166,3 +167,23 @@ and ensure `java` is on `PATH` before running the emulator commands.
 
 Legacy LocalStorage remains only as a temporary offline/error fallback. It is
 not an authentication source and is not a two-way synchronization system.
+
+## Content imports
+
+Administrators create and review imports through callable Functions only. The
+`bookImports/{importId}` collection is never directly readable or writable by
+browser clients, including clients with an `admin: true` custom claim.
+
+Phase 3A fully supports pasted `TEXT`: raw text is preserved, normalized with
+the deterministic conservative utility, and converted into editable chapter
+preview data before publication. `IMAGE` and `PDF` are modeled for later use
+but return `NOT_IMPLEMENTED_YET`; this repository performs no OCR, upload, or
+translation work in this phase. Publishing is transaction-backed and
+idempotent, creating book metadata plus chapter subdocuments once and retaining
+the import record as the source of provenance.
+
+Run the import coverage with:
+
+```sh
+npm run test:imports
+```

@@ -20,7 +20,14 @@ const fromBook = (id: string, data: Record<string, unknown>, chapters?: Chapter[
   requiredPlan: Array.isArray(data.requiredPlan) ? data.requiredPlan.filter((plan): plan is string => typeof plan === 'string') : ['FREE'],
   archived: data.archived === true,
   chapterCount: typeof data.chapterCount === 'number' ? data.chapterCount : chapters?.length,
-  chapters
+  chapters,
+  source: data.source && typeof data.source === 'object' && typeof (data.source as Record<string, unknown>).type === 'string'
+    ? {
+        type: (data.source as Record<string, unknown>).type as 'MANUAL_TEXT' | 'OCR_IMAGE' | 'OCR_PDF',
+        importId: typeof (data.source as Record<string, unknown>).importId === 'string' ? (data.source as Record<string, unknown>).importId as string : undefined
+      }
+    : undefined,
+  languageProcessingStatus: data.languageProcessingStatus === 'NOT_STARTED' ? 'NOT_STARTED' : undefined
 });
 
 export const getBookMetadata = async (bookId: string): Promise<Book | undefined> => {

@@ -10,7 +10,8 @@
     "test:compatibility": "vitest run tests/compatibility.test.ts",
     "test:rules": "firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/rules.test.mjs\"",
     "test:migrations": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/migrations.test.mjs\"",
-    "test:emulator": "npm run test:rules && npm run test:migrations",
+    "test:imports": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/imports.test.mjs\"",
+    "test:emulator": "npm run test:rules && npm run test:migrations && npm run test:imports",
     "test": "npm run test:compatibility && npm run test:emulator"
   },
   "dependencies": {

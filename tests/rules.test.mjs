@@ -85,6 +85,7 @@ test('books, chapters, plans, and dictionary are read-only to all browser client
     await setDoc(doc(db, 'books/book-1/chapters/chapter-1'), { title: 'Chapter' });
     await setDoc(doc(db, 'plans/FREE'), { name: 'Free' });
     await setDoc(doc(db, 'dictionary/word'), { word: 'fixture' });
+    await setDoc(doc(db, 'bookImports/import-1'), { title: 'Private source material' });
   });
   const reader = userDb('reader');
   await assertSucceeds(getDoc(doc(reader, 'books/book-1')));
@@ -99,6 +100,8 @@ test('books, chapters, plans, and dictionary are read-only to all browser client
   await assertFails(updateDoc(doc(browserAdmin, 'plans/FREE'), { name: 'Forged' }));
   await assertFails(setDoc(doc(browserAdmin, 'plans/forged'), { name: 'Forged' }));
   await assertFails(setDoc(doc(reader, 'dictionary/forged'), { word: 'No' }));
+  await assertFails(getDoc(doc(browserAdmin, 'bookImports/import-1')));
+  await assertFails(setDoc(doc(browserAdmin, 'bookImports/forged'), { title: 'No' }));
   await assertFails(getDoc(doc(anonDb(), 'books/book-1')));
 });
 

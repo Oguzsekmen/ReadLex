@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Book, User, CEFRLevel, PlanConfig, PlanType, SubscriptionStatus, Chapter } from '../types';
 import { getBookById, getBooks, getPlans } from '../services/storage';
 import { adminApi, getAdminApiErrorMessage } from '../services/adminApi';
-import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight, Clock } from 'lucide-react';
+import ContentImports from './ContentImports';
+import { Trash2, Edit, Plus, Users, Book as BookIcon, Save, X, Archive, DollarSign, Lock, CheckSquare, Square, Loader2, Search, List, ChevronRight, Clock, FileText } from 'lucide-react';
 import { t } from '../services/i18n';
 
 interface AdminPanelProps {
@@ -11,7 +12,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'BOOKS' | 'USERS' | 'PLANS'>('BOOKS');
+  const [activeTab, setActiveTab] = useState<'BOOKS' | 'IMPORTS' | 'USERS' | 'PLANS'>('BOOKS');
   
   // Data
   const [books, setBooks] = useState<Book[]>([]);
@@ -334,19 +335,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       </div>
 
       <div className="flex space-x-4 mb-6">
-        <button 
+        <button
           onClick={() => setActiveTab('BOOKS')}
           className={`px-6 py-3 rounded-xl font-bold flex items-center ${activeTab === 'BOOKS' ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
         >
           <BookIcon size={20} className="mr-2" /> {t('adminBooks', lang)}
         </button>
-        <button 
+        <button
+          onClick={() => setActiveTab('IMPORTS')}
+          className={`px-6 py-3 rounded-xl font-bold flex items-center ${activeTab === 'IMPORTS' ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+        >
+          <FileText size={20} className="mr-2" /> Content Imports
+        </button>
+        <button
           onClick={() => setActiveTab('USERS')}
           className={`px-6 py-3 rounded-xl font-bold flex items-center ${activeTab === 'USERS' ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
         >
           <Users size={20} className="mr-2" /> {t('adminUsers', lang)}
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('PLANS')}
           className={`px-6 py-3 rounded-xl font-bold flex items-center ${activeTab === 'PLANS' ? 'bg-brand-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
         >
@@ -549,6 +556,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
           )}
         </div>
       )}
+
+      {activeTab === 'IMPORTS' && <ContentImports plans={plans} />}
 
       {/* --- USERS TAB --- */}
       {activeTab === 'USERS' && (

@@ -56,6 +56,58 @@ export interface Book {
   chapterCount?: number;
   createdAt?: Date | number;
   updatedAt?: Date | number;
+  source?: {
+    type: 'MANUAL_TEXT' | 'OCR_IMAGE' | 'OCR_PDF';
+    importId?: string;
+  };
+  languageProcessingStatus?: 'NOT_STARTED';
+}
+
+export type BookImportStatus =
+  | 'DRAFT'
+  | 'UPLOADED'
+  | 'PROCESSING'
+  | 'REVIEW_REQUIRED'
+  | 'READY_TO_PUBLISH'
+  | 'PUBLISHING'
+  | 'PUBLISHED'
+  | 'FAILED'
+  | 'CANCELED';
+
+export type BookImportSourceType = 'TEXT' | 'IMAGE' | 'PDF';
+
+export interface DetectedChapter {
+  tempId: string;
+  title: string;
+  order: number;
+  content: string;
+  sourceStart?: number;
+  sourceEnd?: number;
+}
+
+export interface BookImportJob {
+  id: string;
+  createdBy: string;
+  status: BookImportStatus;
+  sourceType: BookImportSourceType;
+  originalFileName?: string;
+  title?: string;
+  author?: string;
+  level?: CEFRLevel;
+  requiredPlan?: PlanType[];
+  coverUrl?: string;
+  rawText?: string;
+  normalizedText?: string;
+  detectedChapters?: DetectedChapter[];
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+  processingStartedAt?: Date | number;
+  processingCompletedAt?: Date | number;
+  publishedBookId?: string;
+  normalizationVersion?: string;
+  chapterDetectionVersion?: string;
 }
 
 export interface UserBookProgress {

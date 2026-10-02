@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, adminDb } from './admin';
 import { requireAdmin } from './middleware/authorization';
 import { resourceId, validateBook, validatePlan } from './utils/validation';
+import { cancelImport, createImport, getImport, listImports, processTextImport, publishImport, updateImportChapters, updateImportMetadata } from './imports/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -136,4 +137,69 @@ export const listUsers = onCall(async (request) => {
   }));
   audit('listUsers', uid, 'batch', 'success');
   return { users };
+});
+
+export const createBookImport = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const imported = await createImport(uid, request.data);
+  audit('createBookImport', uid, imported.id, 'success');
+  return { import: imported };
+});
+
+export const getBookImport = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const imported = await getImport(id);
+  audit('getBookImport', uid, id, 'success');
+  return { import: imported };
+});
+
+export const listBookImports = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const imports = await listImports();
+  audit('listBookImports', uid, 'batch', 'success');
+  return { imports };
+});
+
+export const updateBookImportMetadata = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const data = request.data as Record<string, unknown>;
+  const id = resourceId(data?.id);
+  const imported = await updateImportMetadata(id, data?.metadata);
+  audit('updateBookImportMetadata', uid, id, 'success');
+  return { import: imported };
+});
+
+export const setBookImportText = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const data = request.data as Record<string, unknown>;
+  const id = resourceId(data?.id);
+  const imported = await processTextImport(id, data?.rawText);
+  audit('setBookImportText', uid, id, 'success');
+  return { import: imported };
+});
+
+export const updateBookImportChapters = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const data = request.data as Record<string, unknown>;
+  const id = resourceId(data?.id);
+  const imported = await updateImportChapters(id, data?.chapters);
+  audit('updateBookImportChapters', uid, id, 'success');
+  return { import: imported };
+});
+
+export const cancelBookImport = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const imported = await cancelImport(id);
+  audit('cancelBookImport', uid, id, 'success');
+  return { import: imported };
+});
+
+export const publishBookImport = onCall(async (request) => {
+  const { uid } = requireAdmin(request);
+  const id = resourceId((request.data as Record<string, unknown>)?.id);
+  const published = await publishImport(id);
+  audit('publishBookImport', uid, id, 'success');
+  return published;
 });

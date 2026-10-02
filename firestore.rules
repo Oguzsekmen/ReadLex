@@ -79,6 +79,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Imports contain unreviewed source material and are exclusively managed
+    // by trusted callable Functions. An admin browser token is not a bypass.
+    match /bookImports/{importId} {
+      allow read, write: if false;
+    }
+
     // Current client documents are keyed by the Firebase Auth UID. A later
     // data-model migration may move these to user subcollections.
     match /vocabulary/{uid} {
