@@ -43,9 +43,25 @@ service cloud.firestore {
       allow delete: if false;
 
       match /vocabulary/{wordId} {
-        // Learning data is user-owned for this compatibility phase. A future
-        // Learning Engine may make review mutations server-authoritative.
-        allow read, write: if owns(uid);
+        allow read: if owns(uid);
+        // Clients can save/edit word content, but review scheduling is written
+        // only by trusted callable Functions using the Admin SDK.
+        allow create: if owns(uid)
+          && (!('strength' in request.resource.data) || request.resource.data.strength == 0)
+          && !('repetitions' in request.resource.data)
+          && !('intervalDays' in request.resource.data)
+          && !('easeFactor' in request.resource.data)
+          && !('correctCount' in request.resource.data)
+          && !('wrongCount' in request.resource.data)
+          && !('lastReviewedAt' in request.resource.data)
+          && !('nextReviewAt' in request.resource.data);
+        allow update: if owns(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'word', 'translation', 'definition', 'exampleSentence', 'type',
+            'level', 'sourceBookId', 'sourceChapterId', 'normalizedWord',
+            'createdAt', 'updatedAt', 'nextReviewDate', 'id'
+          ]);
+        allow delete: if owns(uid);
       }
 
       match /progress/{bookId} {

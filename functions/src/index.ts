@@ -6,6 +6,7 @@ import { requireAdmin } from './middleware/authorization';
 import { resourceId, validateBook, validatePlan } from './utils/validation';
 import { cancelImport, createImport, getImport, listImports, processOcrImport, processTextImport, publishImport, registerImportSourceFiles, updateImportChapters, updateImportMetadata } from './imports/service';
 import { getBookLanguagePreflight, getBookLanguageProcessingStatus as getLanguageStatus, startBookLanguageProcessing as runLanguageProcessing } from './translation/service';
+import { submitVocabularyReview as submitReview } from './learning/reviewService';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -245,4 +246,11 @@ export const startBookLanguageProcessing = onCall({ timeoutSeconds: 300, memory:
 export const retryBookLanguageProcessing = onCall({ timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
   const { uid } = requireAdmin(request); const id = resourceId((request.data as Record<string, unknown>)?.id);
   const status = await runLanguageProcessing(id, undefined, true); audit('retryBookLanguageProcessing', uid, id, 'success'); return { status };
+});
+
+export const submitVocabularyReview = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
+  const result = await submitReview(request.auth.uid, request.data);
+  logger.info('vocabulary_review', { uid: request.auth.uid, vocabularyId: (request.data as Record<string, unknown>)?.vocabularyId, grade: (request.data as Record<string, unknown>)?.grade, alreadySubmitted: result.alreadySubmitted });
+  return result;
 });

@@ -42,12 +42,14 @@ test('profiles allow only safe own creation and updates', async () => {
   await assertFails(setDoc(doc(anonDb(), 'users/guest'), profile('guest', 'guest@example.test')));
 });
 
-test('vocabulary is owned by the path UID only', async () => {
+test('vocabulary is owned by the path UID only and client scheduling writes are denied', async () => {
   const alice = userDb('alice');
   const word = doc(alice, 'users/alice/vocabulary/word-1');
   await assertSucceeds(setDoc(word, { word: 'fixture' }));
   await assertSucceeds(getDoc(word));
   await assertSucceeds(updateDoc(word, { translation: 'test' }));
+  await assertFails(updateDoc(word, { repetitions: 99 }));
+  await assertFails(setDoc(doc(alice, 'users/alice/vocabulary/forged-srs'), { word: 'fixture', repetitions: 1 }));
   await assertSucceeds(deleteDoc(word));
   await assertFails(setDoc(doc(userDb('bob'), 'users/alice/vocabulary/forged'), { word: 'nope' }));
   await assertFails(getDoc(doc(userDb('bob'), 'users/alice/vocabulary/word-1')));

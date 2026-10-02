@@ -172,8 +172,11 @@ export interface VocabularyEntry {
   correctCount?: number;
   wrongCount?: number;
   repetitions?: number;
+  intervalDays?: number;
   easeFactor?: number;
 }
+
+export type ReviewGrade = 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
 
 export type VocabularyWord = VocabularyEntry;
 

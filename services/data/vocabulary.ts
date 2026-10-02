@@ -22,7 +22,16 @@ const fromEntry = (id: string, data: Record<string, unknown>): VocabularyEntry =
   sourceChapterId: typeof data.sourceChapterId === 'string' ? data.sourceChapterId : undefined,
   nextReviewDate: toDate(data.nextReviewDate),
   strength: typeof data.strength === 'number' ? data.strength : 0,
-  normalizedWord: typeof data.normalizedWord === 'string' ? data.normalizedWord : normalizeWord(typeof data.word === 'string' ? data.word : '')
+  normalizedWord: typeof data.normalizedWord === 'string' ? data.normalizedWord : normalizeWord(typeof data.word === 'string' ? data.word : ''),
+  createdAt: data.createdAt === undefined ? undefined : toDate(data.createdAt),
+  updatedAt: data.updatedAt === undefined ? undefined : toDate(data.updatedAt),
+  nextReviewAt: data.nextReviewAt === undefined ? undefined : toDate(data.nextReviewAt),
+  lastReviewedAt: data.lastReviewedAt === undefined ? undefined : toDate(data.lastReviewedAt),
+  correctCount: typeof data.correctCount === 'number' ? data.correctCount : undefined,
+  wrongCount: typeof data.wrongCount === 'number' ? data.wrongCount : undefined,
+  repetitions: typeof data.repetitions === 'number' ? data.repetitions : undefined,
+  intervalDays: typeof data.intervalDays === 'number' ? data.intervalDays : undefined,
+  easeFactor: typeof data.easeFactor === 'number' ? data.easeFactor : undefined
 });
 
 export const getVocabularyEntries = async (uid: string): Promise<VocabularyEntry[]> => {
@@ -46,7 +55,8 @@ export const saveVocabularyEntry = async (uid: string, entry: VocabularyEntry): 
   const id = vocabularyDocumentId(entry);
   const ref = doc(db, 'users', uid, 'vocabulary', id);
   const normalizedWord = entry.normalizedWord || normalizeWord(entry.word);
-  await setDoc(ref, { ...entry, id, normalizedWord, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+  const existing = await getDoc(ref);
+  await setDoc(ref, { ...entry, id, normalizedWord, ...(existing.exists() ? {} : { createdAt: serverTimestamp() }), updatedAt: serverTimestamp() }, { merge: true });
   return { ...entry, id, normalizedWord };
 };
 

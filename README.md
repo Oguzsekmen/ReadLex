@@ -117,7 +117,7 @@ New client writes use scalable documents while reads retain legacy fallback:
 - `books/{bookId}` metadata with `books/{bookId}/chapters/{chapterId}` content.
 - `users/{uid}/vocabulary/{entryId}` for individual vocabulary entries.
 - `users/{uid}/progress/{bookId}` for one-book progress updates.
-- `users/{uid}/reviewEvents/{eventId}` is reserved for a future Learning Engine.
+- `users/{uid}/reviewEvents/{eventId}` contains immutable, server-created SRS review history.
 - `subscriptions`, `payments`, and `dictionary` are typed and rule-protected;
   their server workflows are intentionally not implemented yet.
 
@@ -322,4 +322,29 @@ Run the import coverage with:
 
 ```sh
 npm run test:imports
+```
+
+## Spaced repetition core
+
+Vocabulary reviews use a deterministic, simplified SM-2-inspired schedule.
+`AGAIN` resets the learning repetition and schedules a ten-minute retry;
+`HARD`, `GOOD`, and `EASY` progressively schedule 1+ day intervals while
+keeping the ease factor between 1.3 and 2.8. The user-facing `strength` 1–5
+is derived from repetitions, interval length, and error history—not used as
+the scheduling algorithm itself.
+
+The authenticated `submitVocabularyReview` callable Function owns scheduling:
+it reads only `users/{uid}/vocabulary/{vocabularyId}`, transactionally updates
+the SRS fields, and creates one immutable `users/{uid}/reviewEvents/{eventId}`
+record. A caller-supplied `attemptId` makes retried submissions idempotent.
+Browser clients retain normal vocabulary-content saves but cannot directly
+modify SRS fields or create review events. Legacy vocabulary records missing
+SRS fields receive safe initial defaults on their first review; no destructive
+migration is required.
+
+Run SRS coverage with:
+
+```sh
+npm run test:srs
+npm run test:reviews
 ```
