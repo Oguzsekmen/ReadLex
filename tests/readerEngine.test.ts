@@ -14,7 +14,7 @@ describe('reader engine v2', () => {
   it('handles a generated 10,000-word chapter linearly and retains stable token bounds', () => {
     const synthetic = Array.from({ length: 10_000 }, (_, index) => token(index * 2, index % 100 === 99 ? `word${String.fromCharCode(97 + index % 26)}\n` : `word${String.fromCharCode(97 + index % 26)}`));
     const blocks = groupPreparedTokenBlocks(synthetic);
-    expect(blocks).toHaveLength(100); expect(blocks[0].startTokenIndex).toBe(0); expect(blocks.at(-1)?.endTokenIndex).toBe(19_998);
+    expect(blocks).toHaveLength(100); expect(blocks[0].startTokenIndex).toBe(0); expect(blocks[blocks.length - 1]?.endTokenIndex).toBe(19_998);
   });
 
   it('calculates scroll and resume targets with content-version safety', () => {
