@@ -11,6 +11,7 @@ import { assignManualSubscription, getEntitlements, startTrial as beginTrial } f
 import { verifyPurchaseForAuthenticatedRequest } from './billing/service';
 import { createWebCheckoutForAuthenticatedRequest } from './billing/web/service';
 import { verifyGooglePlayPurchaseForAuthenticatedRequest } from './billing/googlePlay/service';
+import { verifyApplePurchaseForAuthenticatedRequest } from './billing/apple/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -264,3 +265,4 @@ export const adminAssignSubscription = onCall(async request => { requireAdmin(re
 export const verifyPurchase = onCall(async request => verifyPurchaseForAuthenticatedRequest(request.auth?.uid, request.data));
 export const createWebCheckout = onCall(async request => createWebCheckoutForAuthenticatedRequest(request.auth?.uid, request.data));
 export const verifyGooglePlayPurchase = onCall(async request => verifyGooglePlayPurchaseForAuthenticatedRequest(request.auth?.uid, request.data));
+export const verifyApplePurchase = onCall(async request => verifyApplePurchaseForAuthenticatedRequest(request.auth?.uid, request.data));

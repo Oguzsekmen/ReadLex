@@ -166,6 +166,20 @@ exists yet. Future native restore and acknowledgement must use the same
 server-verification boundary, and RTDN must be signature-verified before it can
 produce a normalized billing event.
 
+### Apple billing boundary
+
+A future iOS client may submit only an opaque signed StoreKit transaction and
+logical product key to authenticated `verifyApplePurchase`. StoreKit client
+success is never entitlement authority: a future server adapter must verify the
+transaction, retain only normalized identifiers such as the verified original
+transaction ID, and route it through the existing payment/subscription
+transaction. Apple provider and product mapping are currently
+`PROVIDER_NOT_CONFIGURED`; no App Store product IDs, issuer ID, key ID, private
+key, Apple server credential, StoreKit plugin, App Store Server API call, or
+notification endpoint exists yet. Future restores and App Store Server
+Notifications must pass server-side signature/JWS verification before creating
+normalized billing events.
+
 New vocabulary IDs are deterministic from language, normalized spelling, book,
 and chapter source. This prevents a repeat save of the same source word from
 creating another document, while allowing the word in a different book/chapter.
