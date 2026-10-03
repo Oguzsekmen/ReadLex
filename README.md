@@ -153,6 +153,19 @@ otherwise secure checkout flow, then verify its callback before routing a
 normalized purchase through the existing verification boundary. Future provider
 credentials belong in server environment/secret management only.
 
+### Google Play billing boundary
+
+The future Android client may submit only an opaque Google Play purchase token
+and a logical product key to the authenticated `verifyGooglePlayPurchase`
+boundary. A Play client success is never entitlement authority: a future server
+adapter must verify the token, normalize the result, and route it through the
+existing payment/subscription transaction. Google Play provider and product
+mapping are currently `PROVIDER_NOT_CONFIGURED`; no Play Console product IDs,
+service-account credentials, Billing SDK, Developer API call, or RTDN endpoint
+exists yet. Future native restore and acknowledgement must use the same
+server-verification boundary, and RTDN must be signature-verified before it can
+produce a normalized billing event.
+
 New vocabulary IDs are deterministic from language, normalized spelling, book,
 and chapter source. This prevents a repeat save of the same source word from
 creating another document, while allowing the word in a different book/chapter.

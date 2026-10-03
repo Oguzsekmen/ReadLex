@@ -10,6 +10,7 @@ import { submitVocabularyReview as submitReview } from './learning/reviewService
 import { assignManualSubscription, getEntitlements, startTrial as beginTrial } from './subscriptions/service';
 import { verifyPurchaseForAuthenticatedRequest } from './billing/service';
 import { createWebCheckoutForAuthenticatedRequest } from './billing/web/service';
+import { verifyGooglePlayPurchaseForAuthenticatedRequest } from './billing/googlePlay/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -262,3 +263,4 @@ export const startTrial = onCall(async request => { if (!request.auth?.uid) thro
 export const adminAssignSubscription = onCall(async request => { requireAdmin(request); const input = request.data as Record<string, unknown>; return assignManualSubscription(input?.uid, input?.planId, input?.status, input?.currentPeriodEnd); });
 export const verifyPurchase = onCall(async request => verifyPurchaseForAuthenticatedRequest(request.auth?.uid, request.data));
 export const createWebCheckout = onCall(async request => createWebCheckoutForAuthenticatedRequest(request.auth?.uid, request.data));
+export const verifyGooglePlayPurchase = onCall(async request => verifyGooglePlayPurchaseForAuthenticatedRequest(request.auth?.uid, request.data));
