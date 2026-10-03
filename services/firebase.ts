@@ -1,9 +1,10 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
-import { getFunctions, Functions } from 'firebase/functions';
+import { connectFunctionsEmulator, getFunctions, Functions } from 'firebase/functions';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getAnalytics, Analytics } from 'firebase/analytics';
+import { connectFunctionsEmulatorIfConfigured } from './functionsEmulatorMode';
 
 // Firebase web configuration is intentionally browser-visible. It is not a
 // provider secret, but the Web API key must be restricted in Google Cloud and
@@ -83,7 +84,14 @@ try {
             }
 
             try {
-                functions = getFunctions(app, 'europe-west1');
+                const candidateFunctions = getFunctions(app, 'europe-west1');
+                connectFunctionsEmulatorIfConfigured(candidateFunctions, {
+                  DEV: import.meta.env.DEV,
+                  VITE_USE_FUNCTIONS_EMULATOR: import.meta.env.VITE_USE_FUNCTIONS_EMULATOR,
+                  VITE_FUNCTIONS_EMULATOR_HOST: import.meta.env.VITE_FUNCTIONS_EMULATOR_HOST,
+                  VITE_FUNCTIONS_EMULATOR_PORT: import.meta.env.VITE_FUNCTIONS_EMULATOR_PORT
+                }, connectFunctionsEmulator);
+                functions = candidateFunctions;
             } catch (functionsError: any) {
                 console.warn("Firebase Functions init failed:", functionsError);
                 if (!initializationError) initializationError = functionsError.message || "Functions init failed";

@@ -18,6 +18,51 @@ Prerequisite: Node.js 20 or later.
 3. Install dependencies with `npm install`.
 4. Run `npm run dev`, or verify a production bundle with `npm run build`.
 
+## Hybrid local manual testing
+
+Use this mode only to test local callable Functions while manually inspecting
+the production application's Auth session and Firestore content. It is an
+explicit development-only opt-in: the browser connects **only Functions** to a
+loopback emulator. It does not connect browser Auth, Firestore, or Storage to
+an emulator.
+
+Add these non-secret values to your ignored `.env.local`:
+
+```ini
+VITE_USE_FUNCTIONS_EMULATOR=true
+VITE_FUNCTIONS_EMULATOR_HOST=127.0.0.1
+VITE_FUNCTIONS_EMULATOR_PORT=5001
+```
+
+In a first Windows PowerShell terminal, start all required local services with
+the same project ID as the browser app. The `READLEX_LOCAL_HYBRID` flag fails
+Functions startup if the Admin SDK has not been directed to both local
+Firestore and Storage emulators:
+
+```powershell
+$env:READLEX_LOCAL_HYBRID="true"
+npx firebase-tools emulators:start --project readlex-app-c1912 --only functions,firestore,storage
+```
+
+In a second terminal run `npm run dev`. The callable URL is then
+`http://127.0.0.1:5001/readlex-app-c1912/europe-west1/<function>`.
+
+The split is intentional and must be understood before using this mode:
+
+- Browser Auth: production Firebase Auth (the signed-in user and ID token remain authoritative).
+- Browser Firestore and Storage: production Firebase services (real books remain visible; ordinary browser writes still follow production rules).
+- Browser Functions: local Functions Emulator only, and only after the explicit DEV opt-in above.
+- Functions Admin Firestore and Storage: local emulators only; hybrid startup fails closed when their emulator hosts are absent.
+
+The local entitlement resolver therefore reads local `subscriptions/{uid}` data
+and can safely return FREE when no local subscription exists. It never reads a
+production subscription as a fallback. OCR and Translation provider selection
+is also blocked while `READLEX_LOCAL_HYBRID=true`, so manual entitlement
+testing cannot accidentally invoke Cloud Vision or Cloud Translation. Do not
+use a LAN address for the Functions host: the client accepts only `localhost`
+or `127.0.0.1` to avoid forwarding a production Firebase Auth token to another
+machine.
+
 ## Mobile development (Capacitor baseline)
 
 ReadLex has committed Capacitor 6 Android and iOS shells with the stable
