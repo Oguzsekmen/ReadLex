@@ -124,6 +124,17 @@ New client writes use scalable documents while reads retain legacy fallback:
   verification and any premium-only backend operation must verify entitlement
   server-side; frontend entitlement data is only presentation and access UX.
 
+## Billing foundation
+
+Billing has a provider-neutral backend domain for future WEB, GOOGLE_PLAY, and
+APPLE purchases. It defines logical monthly and yearly Premium products and
+provider stubs that fail closed until the relevant provider account, product
+mapping, and server-side verification are configured. A client purchase signal
+can never grant Premium: only a verified backend purchase may later update a
+subscription, after which the existing entitlement resolver remains authority.
+No provider account, credentials, live product IDs, payment SDK, checkout, or
+webhook is configured in this phase.
+
 New vocabulary IDs are deterministic from language, normalized spelling, book,
 and chapter source. This prevents a repeat save of the same source word from
 creating another document, while allowing the word in a different book/chapter.
