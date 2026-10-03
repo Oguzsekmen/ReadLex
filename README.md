@@ -118,8 +118,11 @@ New client writes use scalable documents while reads retain legacy fallback:
 - `users/{uid}/vocabulary/{entryId}` for individual vocabulary entries.
 - `users/{uid}/progress/{bookId}` for one-book progress updates.
 - `users/{uid}/reviewEvents/{eventId}` contains immutable, server-created SRS review history.
-- `subscriptions`, `payments`, and `dictionary` are typed and rule-protected;
-  their server workflows are intentionally not implemented yet.
+- `subscriptions` and `payments` are server-authoritative and browser clients
+  are read-only; entitlement state is resolved by trusted Functions, not profile
+  fields or browser time. There is no payment provider yet. Any future provider
+  verification and any premium-only backend operation must verify entitlement
+  server-side; frontend entitlement data is only presentation and access UX.
 
 New vocabulary IDs are deterministic from language, normalized spelling, book,
 and chapter source. This prevents a repeat save of the same source word from

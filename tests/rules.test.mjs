@@ -129,17 +129,25 @@ test('books, chapters, plans, and dictionary are read-only to all browser client
 test('subscriptions and payments are owner-readable but never client-writable', async () => {
   await testEnv.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
-    await setDoc(doc(db, 'subscriptions/sub-alice'), { userId: 'alice', plan: 'FREE' });
-    await setDoc(doc(db, 'payments/pay-alice'), { userId: 'alice', amount: 1 });
+    await setDoc(doc(db, 'subscriptions/alice'), { userId: 'alice', planId: 'FREE', status: 'ACTIVE', provider: 'NONE', trialStartedAt: 1, trialEndsAt: 2, trialUsedAt: 1, currentPeriodEnd: 2 });
+    await setDoc(doc(db, 'subscriptions/duplicate-alice'), { userId: 'alice', planId: 'PREMIUM' });
+    await setDoc(doc(db, 'payments/pay-alice'), { userId: 'alice', amount: 1, status: 'PENDING', provider: 'NONE' });
   });
-  await assertSucceeds(getDoc(doc(userDb('alice'), 'subscriptions/sub-alice')));
+  const alice = userDb('alice');
+  await assertSucceeds(getDoc(doc(alice, 'subscriptions/alice')));
   await assertSucceeds(getDoc(doc(userDb('alice'), 'payments/pay-alice')));
-  await assertFails(getDoc(doc(userDb('bob'), 'subscriptions/sub-alice')));
-  await assertFails(setDoc(doc(userDb('alice'), 'subscriptions/forged'), { userId: 'alice', plan: 'ENTERPRISE' }));
-  await assertFails(updateDoc(doc(userDb('alice'), 'subscriptions/sub-alice'), { plan: 'ENTERPRISE' }));
-  await assertFails(deleteDoc(doc(userDb('alice'), 'subscriptions/sub-alice')));
-  await assertFails(setDoc(doc(userDb('alice'), 'payments/forged'), { userId: 'alice', amount: 999999 }));
-  await assertFails(deleteDoc(doc(userDb('alice'), 'payments/pay-alice')));
+  await assertFails(getDoc(doc(alice, 'subscriptions/duplicate-alice')));
+  await assertFails(getDoc(doc(userDb('bob'), 'subscriptions/alice')));
+  await assertFails(setDoc(doc(alice, 'subscriptions/alice'), { userId: 'alice', planId: 'PREMIUM', status: 'ACTIVE' }));
+  await assertFails(updateDoc(doc(alice, 'subscriptions/alice'), { status: 'ACTIVE' }));
+  await assertFails(updateDoc(doc(alice, 'subscriptions/alice'), { provider: 'MANUAL' }));
+  await assertFails(updateDoc(doc(alice, 'subscriptions/alice'), { planId: 'PREMIUM' }));
+  await assertFails(updateDoc(doc(alice, 'subscriptions/alice'), { trialStartedAt: 3, trialEndsAt: 4, trialUsedAt: 3 }));
+  await assertFails(updateDoc(doc(alice, 'subscriptions/alice'), { currentPeriodEnd: 999999 }));
+  await assertFails(deleteDoc(doc(alice, 'subscriptions/alice')));
+  await assertFails(setDoc(doc(alice, 'payments/forged'), { userId: 'alice', amount: 999999, status: 'SUCCEEDED' }));
+  await assertFails(updateDoc(doc(alice, 'payments/pay-alice'), { status: 'SUCCEEDED', provider: 'FORGED' }));
+  await assertFails(deleteDoc(doc(alice, 'payments/pay-alice')));
 });
 
 test('trusted emulator seeding bypasses rules while browser clients do not', async () => {

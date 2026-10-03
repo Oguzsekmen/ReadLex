@@ -7,10 +7,10 @@ export const normalizeStatus = (value: unknown): EntitlementStatus | undefined =
 
 // Pure, deterministic and provider-independent. Functions supply server time.
 export const resolveEntitlements = (subscription: SubscriptionRecord | undefined, now: number): EntitlementResult => {
-  const status = normalizeStatus(subscription?.status); const free = (state: EntitlementStatus | 'FREE' = 'FREE'): EntitlementResult => ({ effectivePlan: 'FREE', status: state, entitlements: ['FREE'], isPremium: false, isTrialing: false, trialEligible: !subscription?.trialUsedAt });
+  const status = normalizeStatus(subscription?.status); const hasUsedTrial = typeof subscription?.trialUsedAt === 'number'; const free = (state: EntitlementStatus | 'FREE' = 'FREE'): EntitlementResult => ({ effectivePlan: 'FREE', status: state, entitlements: ['FREE'], isPremium: false, isTrialing: false, trialEligible: !hasUsedTrial });
   if (!status) return free();
   if (status === 'TRIALING') return subscription?.trialEndsAt && now < subscription.trialEndsAt ? { effectivePlan: 'PREMIUM', status, entitlements: ['FREE', 'PREMIUM'], isPremium: true, isTrialing: true, trialEndsAt: subscription.trialEndsAt, trialEligible: false } : free('EXPIRED');
   const valid = Boolean(subscription?.currentPeriodEnd && now < subscription.currentPeriodEnd);
-  if ((status === 'ACTIVE' || status === 'CANCELED') && valid) return { effectivePlan: 'PREMIUM', status, entitlements: ['FREE', 'PREMIUM'], isPremium: true, isTrialing: false, currentPeriodEnd: subscription!.currentPeriodEnd, trialEligible: !subscription?.trialUsedAt };
+  if ((status === 'ACTIVE' || status === 'CANCELED') && valid) return { effectivePlan: 'PREMIUM', status, entitlements: ['FREE', 'PREMIUM'], isPremium: true, isTrialing: false, currentPeriodEnd: subscription!.currentPeriodEnd, trialEligible: !hasUsedTrial };
   return free(status === 'PAST_DUE' ? 'PAST_DUE' : 'EXPIRED');
 };

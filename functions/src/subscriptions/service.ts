@@ -11,7 +11,7 @@ export const getEntitlements = async (uid: string, now = Date.now()) => resolveE
 export const startTrial = async (uid: string, now = Date.now()) => adminDb.runTransaction(async tx => {
   const subscription = ref(uid); const snapshot = await tx.get(subscription); const current = data(snapshot.data()); const resolved = resolveEntitlements(current, now);
   if (resolved.isTrialing) return resolved;
-  if (current.trialUsedAt) throw new HttpsError('failed-precondition', 'TRIAL_ALREADY_USED');
+  if (typeof current.trialUsedAt === 'number') throw new HttpsError('failed-precondition', 'TRIAL_ALREADY_USED');
   const ends = now + DEFAULT_TRIAL_DAYS * 24 * 60 * 60 * 1000;
   tx.set(subscription, { userId: uid, planId: 'PREMIUM', provider: 'NONE', status: 'TRIALING', trialStartedAt: now, trialEndsAt: ends, trialUsedAt: now, createdAt: snapshot.exists ? snapshot.data()?.createdAt : FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return resolveEntitlements({ status: 'TRIALING', trialEndsAt: ends, trialUsedAt: now }, now);

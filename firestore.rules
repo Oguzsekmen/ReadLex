@@ -143,7 +143,9 @@ service cloud.firestore {
     }
 
     match /subscriptions/{subscriptionId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      // Subscription records are canonically keyed by the Firebase Auth UID.
+      // Requiring both identifiers avoids exposing a malformed duplicate record.
+      allow read: if owns(subscriptionId) && resource.data.userId == request.auth.uid;
       allow write: if false;
     }
 
