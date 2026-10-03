@@ -7,6 +7,7 @@ import { resourceId, validateBook, validatePlan } from './utils/validation';
 import { cancelImport, createImport, getImport, listImports, processOcrImport, processTextImport, publishImport, registerImportSourceFiles, updateImportChapters, updateImportMetadata } from './imports/service';
 import { getBookLanguagePreflight, getBookLanguageProcessingStatus as getLanguageStatus, startBookLanguageProcessing as runLanguageProcessing } from './translation/service';
 import { submitVocabularyReview as submitReview } from './learning/reviewService';
+import { assignManualSubscription, getEntitlements, startTrial as beginTrial } from './subscriptions/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -254,3 +255,6 @@ export const submitVocabularyReview = onCall(async (request) => {
   logger.info('vocabulary_review', { uid: request.auth.uid, vocabularyId: (request.data as Record<string, unknown>)?.vocabularyId, grade: (request.data as Record<string, unknown>)?.grade, alreadySubmitted: result.alreadySubmitted });
   return result;
 });
+export const getMyEntitlements = onCall(async request => { if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.'); return getEntitlements(request.auth.uid); });
+export const startTrial = onCall(async request => { if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.'); return beginTrial(request.auth.uid); });
+export const adminAssignSubscription = onCall(async request => { requireAdmin(request); const input = request.data as Record<string, unknown>; return assignManualSubscription(input?.uid, input?.planId, input?.status, input?.currentPeriodEnd); });
