@@ -1,21 +1,26 @@
 
 import React, { useState, useMemo } from 'react';
-import { Book, BookStatus, CEFRLevel, User, PlanType, UserBookProgress } from '../types';
+import { Book, BookStatus, CEFRLevel, User, UserBookProgress } from '../types';
 import { CheckCircle, Clock, CircleDashed, Lock, Sparkles } from 'lucide-react';
 import { t } from '../services/i18n';
+import { canAccessRequiredPlans, EntitlementData, normalizeRequiredPlans } from '../services/entitlements';
 
 interface LibraryProps {
   books: Book[];
   progressMap: Record<string, UserBookProgress>;
   onSelectBook: (b: Book) => void;
   user: User;
+  entitlement: EntitlementData;
+  entitlementLoading: boolean;
 }
 
 const Library: React.FC<LibraryProps> = ({ 
   books, 
   progressMap, 
   onSelectBook,
-  user
+  user,
+  entitlement,
+  entitlementLoading
 }) => {
   const [activeTab, setActiveTab] = useState<'ALL' | CEFRLevel>('ALL');
 
@@ -27,27 +32,6 @@ const Library: React.FC<LibraryProps> = ({
     if (activeTab === 'ALL') return visibleBooks;
     return visibleBooks.filter(b => b.level === activeTab);
   }, [books, activeTab]);
-
-  const canAccessBook = (bookPlans: PlanType[]): boolean => {
-    // 1. "FREE" planındaki kitaplar HERKESE açıktır.
-    // Kullanıcının planı ne olursa olsun (Expired, Trial, Monthly vb.) erişebilir.
-    if (bookPlans.includes('FREE')) return true;
-
-    const isTrial = user.subscriptionStatus === 'TRIAL';
-    const isExpired = user.subscriptionStatus === 'EXPIRED';
-
-    // 2. Trial allows everything
-    if (isTrial) return true;
-
-    // 3. Expired users act like Free users (or restricted to Free content)
-    // Yukarıdaki 1. kural zaten FREE kontrolünü yaptığı için buraya düşen expired kullanıcılar reddedilir.
-    if (isExpired) {
-        return false;
-    }
-
-    // 4. Active users: Check if their plan is in the list
-    return bookPlans.includes(user.plan);
-  };
 
   const getStatusBadge = (status?: BookStatus) => {
     switch(status) {
@@ -95,7 +79,8 @@ const Library: React.FC<LibraryProps> = ({
         {filteredBooks.map(book => {
           const progress = progressMap[book.id];
           const status = progress?.status || 'NOT_STARTED';
-          const isLocked = !canAccessBook(book.requiredPlan);
+          const requirements = normalizeRequiredPlans(book.requiredPlan);
+          const isLocked = !canAccessRequiredPlans(book.requiredPlan, entitlement, entitlementLoading);
 
           return (
             <div key={book.id} className={`bg-white dark:bg-gray-800 rounded-3xl overflow-hidden border shadow-sm transition-all duration-300 group flex flex-col relative ${getCardStyle(status)} ${isLocked ? 'opacity-80' : 'hover:shadow-xl'}`}>
@@ -108,7 +93,7 @@ const Library: React.FC<LibraryProps> = ({
                   </div>
                   <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-lg">
                     <p className="font-bold text-gray-800 dark:text-white text-sm">
-                      {user.subscriptionStatus === 'EXPIRED' ? 'Subscription Expired' : 'Premium Access Required'}
+                      {entitlementLoading ? 'Üyelik doğrulanıyor' : 'Premium üyelik gerekli'}
                     </p>
                   </div>
                 </div>
@@ -124,7 +109,7 @@ const Library: React.FC<LibraryProps> = ({
                   {getStatusBadge(status)}
                 </div>
                 {/* Only show Premium badge if it's NOT a purely free book */}
-                {!(book.requiredPlan.includes('FREE')) && (
+                {!requirements.includes('FREE') && (
                   <div className="absolute top-3 left-3">
                      <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded flex items-center shadow-lg">
                        <Sparkles size={10} className="mr-1" /> PREMIUM

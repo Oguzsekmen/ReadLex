@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BookOpen, GraduationCap, LayoutDashboard, LogOut, Menu, User, X, Moon, Sun, Globe, Shield, Sparkles, Crown } from 'lucide-react';
 import { t } from '../services/i18n';
 import { User as UserType } from '../types';
+import { EntitlementData } from '../services/entitlements';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,8 @@ interface LayoutProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   currentUser: UserType;
+  entitlement: EntitlementData;
+  entitlementLoading: boolean;
   onToggleLang: () => void;
   onLogout: () => void;
 }
@@ -21,6 +24,8 @@ const Layout: React.FC<LayoutProps> = ({
   isDarkMode, 
   toggleTheme,
   currentUser,
+  entitlement,
+  entitlementLoading,
   onToggleLang,
   onLogout
 }) => {
@@ -47,8 +52,7 @@ const Layout: React.FC<LayoutProps> = ({
     );
   };
 
-  // Show upgrade if: Free, Trailer Plan, Trial Status, or Expired Status
-  const showUpgrade = currentUser.plan === 'FREE' || currentUser.plan === 'TRAILER' || currentUser.subscriptionStatus === 'TRIAL' || currentUser.subscriptionStatus === 'EXPIRED';
+  const showUpgrade = !entitlementLoading && !entitlement.isPremium;
 
   return (
     <div className={`min-h-screen flex ${isDarkMode ? 'dark' : ''} bg-[#F0F4F8] dark:bg-gray-950 font-sans`}>
@@ -85,7 +89,7 @@ const Layout: React.FC<LayoutProps> = ({
                    <div className="relative z-10">
                       <div className="flex justify-between items-start mb-2">
                         <span className="font-bold text-xs bg-white/20 px-2 py-1 rounded-lg">
-                           {currentUser.plan === 'FREE' ? (lang === 'TR' ? 'ÜCRETSİZ PLAN' : 'FREE PLAN') : (lang === 'TR' ? 'DENEME SÜRESİ' : 'FREE TRIAL')}
+                           {lang === 'TR' ? 'ÜCRETSİZ PLAN' : 'FREE PLAN'}
                         </span>
                         <Crown size={20} className="fill-yellow-300 text-yellow-300 animate-pulse" />
                       </div>

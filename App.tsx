@@ -4,7 +4,7 @@ import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Profile from './components/Profile';
 import Pricing from './components/Pricing';
-import { Book, User, VocabularyWord, QuizResult, BookStatus, PlanType, PlanConfig, UserBookProgress } from './types';
+import { Book, User, VocabularyWord, QuizResult, BookStatus, UserBookProgress } from './types';
 import { 
   initStorage, 
   getBooks, 
@@ -15,7 +15,6 @@ import {
   saveUser,
   deleteUserVocab,
   getBookById,
-  getPlans,
   isUsingFirebase,
   lastFirebaseError
 } from './services/storage';
@@ -32,6 +31,8 @@ import { Trophy, Flame, Play, Clock, CheckCircle, Crown, Lock, ArrowRight, BookO
 import Library from './components/Library';
 import { LearningSummary } from './components/LearningSummary';
 import { emptyLearningSummary, LearningSummary as LearningSummaryData, loadLearningSummary } from './services/learning/statsService';
+import { useEntitlements } from './hooks/useEntitlements';
+import { EntitlementData } from './services/entitlements';
 
 // --- Vocabulary Wrapper ---
 const VocabularyWrapper = ({ user, words, onDelete }: { user: User, words: VocabularyWord[], onDelete: (id: string) => void }) => {
@@ -100,30 +101,31 @@ interface DashboardProps {
   vocabulary: VocabularyWord[];
   wordsAddedToday: number;
   onStartQuiz: () => void;
-  onUpgradeClick: () => void;
   books: Book[];
   bookProgress: Record<string, UserBookProgress>;
   onContinueBook: (book: Book, autoJump?: boolean) => void;
   onNavigateToLibrary: () => void;
   learningSummary: LearningSummaryData;
+  entitlement: EntitlementData;
 }
 
-const Dashboard = ({ 
+export const Dashboard = ({
   user, 
   vocabCount, 
   vocabulary,
   wordsAddedToday, 
   onStartQuiz, 
-  onUpgradeClick,
   books,
   bookProgress,
   onContinueBook,
   onNavigateToLibrary,
-  learningSummary
+  learningSummary,
+  entitlement
 }: DashboardProps) => {
   const lang = user.languagePreference;
-  const isTrial = user.subscriptionStatus === 'TRIAL';
-  const daysLeft = Math.ceil((user.trialEndsAt - Date.now()) / (1000 * 60 * 60 * 24));
+  const membershipLabel = entitlement.isTrialing
+    ? (lang === 'TR' ? 'PREMİUM DENEME' : 'PREMIUM TRIAL')
+    : entitlement.isPremium ? 'PREMIUM' : (lang === 'TR' ? 'ÜCRETSİZ PLAN' : 'FREE PLAN');
 
   const dailyGoal = user.dailyGoal || 25; 
   const progressPercent = Math.min(100, (learningSummary.reviewedToday / dailyGoal) * 100);
@@ -169,15 +171,9 @@ const Dashboard = ({
           <div className="w-full md:w-auto">
              <h1 className="text-3xl md:text-5xl font-black mb-3 drop-shadow-sm leading-tight">{t('welcomeBack', lang)}, {user.name}!</h1>
              <p className="text-brand-100 text-xl font-medium flex flex-wrap items-center gap-2">
-               {isTrial ? (
-                 <span className="bg-white/20 px-3 py-1 rounded-lg text-sm font-bold flex items-center whitespace-nowrap">
-                    <Clock size={16} className="mr-2" /> {daysLeft} Days left
-                 </span>
-               ) : (
-                 <span className={`px-3 py-1 rounded-lg text-sm font-bold flex items-center whitespace-nowrap ${user.plan === 'FREE' ? 'bg-gray-400/20 text-gray-200' : 'bg-yellow-400/20 text-yellow-200'}`}>
-                    <Crown size={16} className="mr-2" /> {user.plan}
-                 </span>
-               )}
+               <span className={`px-3 py-1 rounded-lg text-sm font-bold flex items-center whitespace-nowrap ${entitlement.isPremium ? 'bg-yellow-400/20 text-yellow-200' : 'bg-gray-400/20 text-gray-200'}`}>
+                  <Crown size={16} className="mr-2" /> {membershipLabel}
+               </span>
              </p>
           </div>
           
@@ -203,16 +199,6 @@ const Dashboard = ({
           </div>
         </div>
       </div>
-
-      {isTrial && daysLeft <= 1 && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl flex items-center justify-between animate-pulse">
-           <div>
-             <h3 className="text-red-700 font-bold text-lg">Trial Expiring Soon!</h3>
-             <p className="text-red-600">Upgrade now to keep your progress and streak safe.</p>
-           </div>
-           <button onClick={onUpgradeClick} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700">Upgrade</button>
-        </div>
-      )}
 
       {/* --- Active Book / Library Suggestions Section --- */}
       {activeBook ? (
@@ -353,8 +339,8 @@ const App = () => {
   const [books, setBooks] = useState<Book[]>([]);
   const [savedWords, setSavedWords] = useState<VocabularyWord[]>([]);
   const [bookProgress, setBookProgress] = useState<Record<string, UserBookProgress>>({});
-  const [plans, setPlans] = useState<PlanConfig[]>([]);
   const [learningSummary, setLearningSummary] = useState<LearningSummaryData>(emptyLearningSummary);
+  const entitlements = useEntitlements(user?.id);
 
   // Initialization
   useEffect(() => {
@@ -364,9 +350,6 @@ const App = () => {
         await initStorage();
         setIsOnline(isUsingFirebase());
         
-        const loadedPlans = await getPlans();
-        setPlans(loadedPlans);
-
       } catch (e) {
         console.error("Initialization error:", e);
       } finally {
@@ -439,32 +422,6 @@ const App = () => {
       </div>
     );
   };
-
-  useEffect(() => {
-    if (user && user.subscriptionStatus === 'TRIAL') {
-      if (Date.now() > user.trialEndsAt) {
-         const downgradedUser: User = { 
-           ...user, 
-           subscriptionStatus: 'ACTIVE', 
-           plan: 'FREE',
-           trialEndsAt: 0 
-         };
-         setUser(downgradedUser);
-         alert("Your trial period has ended. You have been downgraded to the Free plan.");
-      }
-    } else if (user && user.subscriptionStatus === 'ACTIVE' && user.plan !== 'FREE' && user.subscriptionEndsAt) {
-       if (Date.now() > user.subscriptionEndsAt) {
-         const downgradedUser: User = { 
-           ...user, 
-           subscriptionStatus: 'ACTIVE', 
-           plan: 'FREE',
-           subscriptionEndsAt: 0 
-         };
-         setUser(downgradedUser);
-         alert("Your subscription has expired. You have been downgraded to the Free plan.");
-       }
-    }
-  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -662,14 +619,6 @@ const App = () => {
     if (user) void loadLearningSummary(user.id).then(setLearningSummary).catch(() => undefined);
   };
 
-  const handleUpgrade = (plan: PlanType) => {
-    if(!user) return;
-    
-    // Subscription entitlements require a verified server-side payment flow.
-    // Never let browser UI grant a plan or write subscription fields.
-    alert("Subscription activation is not available yet. No payment or plan change was made.");
-  };
-
   const getDailyWordCountInternal = (currentWords: VocabularyWord[]) => {
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -756,22 +705,22 @@ const App = () => {
             vocabulary={savedWords}
             wordsAddedToday={getDailyWordCount()} 
             onStartQuiz={handleStartQuiz} 
-            onUpgradeClick={() => setCurrentPage('pricing')} 
             books={books}
             bookProgress={bookProgress}
             onContinueBook={handleSelectBook}
             onNavigateToLibrary={() => setCurrentPage('library')}
             learningSummary={learningSummary}
+            entitlement={entitlements.data}
           />
         );
       case 'library':
-        return <Library books={books} progressMap={bookProgress} onSelectBook={handleSelectBook} user={user} />;
+        return <Library books={books} progressMap={bookProgress} onSelectBook={handleSelectBook} user={user} entitlement={entitlements.data} entitlementLoading={entitlements.loading} />;
       case 'vocabulary':
         return <VocabularyWrapper user={user} words={savedWords} onDelete={handleDeleteWord} />;
       case 'profile':
         return <Profile user={user} onUpdate={handleUpdateUser} />;
       case 'pricing':
-        return <Pricing user={user} onUpgrade={handleUpgrade} />;
+        return <Pricing user={user} entitlement={entitlements.data} loading={entitlements.loading} error={entitlements.error} onStartTrial={entitlements.startTrial} onRetry={entitlements.refresh} />;
       case 'admin':
         if (user.role !== 'ADMIN') return <div className="p-10 text-center text-red-500 font-bold text-2xl">Access Denied</div>;
         return <AdminPanel currentUser={user} />;
@@ -783,12 +732,12 @@ const App = () => {
             vocabulary={savedWords}
             wordsAddedToday={getDailyWordCount()} 
             onStartQuiz={handleStartQuiz} 
-            onUpgradeClick={() => setCurrentPage('pricing')} 
             books={books}
             bookProgress={bookProgress}
             onContinueBook={handleSelectBook}
             onNavigateToLibrary={() => setCurrentPage('library')}
             learningSummary={learningSummary}
+            entitlement={entitlements.data}
           />
         );
     }
@@ -808,6 +757,8 @@ const App = () => {
         isDarkMode={isDarkMode}
         toggleTheme={() => setIsDarkMode(!isDarkMode)}
         currentUser={user}
+        entitlement={entitlements.data}
+        entitlementLoading={entitlements.loading}
         onToggleLang={handleToggleLanguage}
         onLogout={handleLogout}
       >
