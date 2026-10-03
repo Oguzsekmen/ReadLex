@@ -52,6 +52,37 @@ not configured. The app uses `viewport-fit=cover` and safe-area-aware Reader
 controls; device behavior must still be smoke-tested on a real emulator or
 physical device before release.
 
+### Mobile auth and session foundation
+
+Firebase Auth remains the only authentication authority in the Capacitor
+WebView; Firebase UID is the canonical identity. App boot remains in an
+`AUTH_LOADING` state until `onAuthStateChanged` resolves, then loads the
+Firebase-backed profile and entitlement for that UID. A logout or UID change
+clears private in-memory state before another profile is loaded, and late
+requests from an old user are ignored.
+
+The Firebase SDK owns session persistence. ReadLex never copies passwords,
+Firebase ID tokens, refresh tokens, or provider credentials into LocalStorage,
+sessionStorage, or a custom native store. Reader font/line-height preferences
+are intentionally ordinary LocalStorage preferences; legacy book, vocabulary,
+progress, and dictionary keys are non-authoritative offline/error caches and
+are never authentication authority.
+
+There is currently no app-owned sensitive value that needs native Keychain or
+Keystore storage. `services/native/secureStorage.ts` is an explicit
+`NOT_CONFIGURED` boundary that rejects sensitive reads/writes and never falls
+back to LocalStorage. No secure-storage plugin is installed. If a future
+app-owned secret genuinely requires storage, add a free, open-source Capacitor
+adapter backed by Android Keystore and iOS Keychain; do not copy Firebase
+tokens into it.
+
+Email/password sign-in, registration, verification-email sending, reset-email
+requests, and logout use Firebase's Web SDK and work through the WebView. A
+password-reset or verification-email return path may require deep-link work in
+a later phase. Google popup sign-in is intentionally web-only: on a native
+shell it returns a normalized not-configured error until a future native OAuth
+adapter is designed. No OAuth client secret or URL scheme is configured here.
+
 ## Firebase Authentication setup
 
 In the Firebase Console, add the configured web app and then:

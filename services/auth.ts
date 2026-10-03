@@ -13,6 +13,7 @@ import {
 import { auth, googleProvider } from './firebase';
 import { User } from '../types';
 import { loadOrCreateUserProfile } from './storage';
+import { isNativePlatform } from './native/platform';
 
 const requireAuth = () => {
   if (!auth) throw new Error('auth/not-configured');
@@ -30,10 +31,11 @@ export const signUpWithEmail = async (name: string, email: string, password: str
 export const signInWithEmail = (email: string, password: string) =>
   signInWithEmailAndPassword(requireAuth(), email.trim(), password);
 
-// Web uses a popup today. A Capacitor/native provider can replace this service
-// implementation later without changing the Auth component.
 export const signInWithGoogle = () => {
   if (!auth || !googleProvider) throw new Error('auth/not-configured');
+  // Popup OAuth is a browser flow. A future native adapter can replace this
+  // branch without introducing credentials into the application bundle.
+  if (isNativePlatform()) throw new Error('auth/native-google-sign-in-not-configured');
   return signInWithPopup(auth, googleProvider);
 };
 
@@ -88,6 +90,7 @@ export const getAuthErrorMessage = (error: unknown, language: 'TR' | 'EN' = 'TR'
     'auth/network-request-failed': 'Ağ bağlantısı kurulamadı. Lütfen tekrar deneyin.',
     'auth/popup-closed-by-user': 'Google giriş penceresi kapatıldı.',
     'auth/popup-blocked': 'Google giriş penceresi tarayıcı tarafından engellendi.',
+    'auth/native-google-sign-in-not-configured': 'Google ile giriş mobil uygulamada henüz yapılandırılmadı. E-posta ile giriş yapabilirsiniz.',
     'auth/too-many-requests': 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.',
     'auth/not-configured': 'Firebase yapılandırması mevcut değil.',
     'auth/no-current-user': 'Doğrulama e-postası için aktif bir kullanıcı bulunamadı.'

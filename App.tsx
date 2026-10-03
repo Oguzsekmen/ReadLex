@@ -19,7 +19,7 @@ import {
   lastFirebaseError
 } from './services/storage';
 import { initializationError } from './services/firebase';
-import { getAuthenticatedProfile, observeAuthState, refreshAuthenticatedProfile, signOutUser } from './services/auth';
+import { refreshAuthenticatedProfile, signOutUser } from './services/auth';
 import { t } from './services/i18n';
 import { translatePos } from './services/geminiService';
 import BookReader from './components/BookReader';
@@ -33,6 +33,8 @@ import { LearningSummary } from './components/LearningSummary';
 import { emptyLearningSummary, LearningSummary as LearningSummaryData, loadLearningSummary } from './services/learning/statsService';
 import { useEntitlements } from './hooks/useEntitlements';
 import { EntitlementData } from './services/entitlements';
+import { useFirebaseAuthSession } from './hooks/useFirebaseAuthSession';
+import { clearOwnedSecureStorage } from './services/native/secureStorage';
 
 // --- Vocabulary Wrapper ---
 const VocabularyWrapper = ({ user, words, onDelete }: { user: User, words: VocabularyWord[], onDelete: (id: string) => void }) => {
@@ -322,8 +324,7 @@ export const Dashboard = ({
 
 // --- Main App Component ---
 const App = () => {
-  const [authStatus, setAuthStatus] = useState<'AUTH_LOADING' | 'AUTHENTICATED' | 'UNAUTHENTICATED'>('AUTH_LOADING');
-  const [user, setUser] = useState<User | null>(null);
+  const { status: authStatus, user, setUser, clearSession } = useFirebaseAuthSession();
   const [currentPage, setCurrentPage] = useState('dashboard');
   
   // Selection State
@@ -341,6 +342,11 @@ const App = () => {
   const [bookProgress, setBookProgress] = useState<Record<string, UserBookProgress>>({});
   const [learningSummary, setLearningSummary] = useState<LearningSummaryData>(emptyLearningSummary);
   const entitlements = useEntitlements(user?.id);
+  const currentUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    currentUserId.current = user?.id || null;
+  }, [user?.id]);
 
   // Initialization
   useEffect(() => {
@@ -357,41 +363,6 @@ const App = () => {
       }
     };
     init();
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    const unsubscribe = observeAuthState(async firebaseUser => {
-      if (!firebaseUser) {
-        if (!active) return;
-        setUser(null);
-        setSavedWords([]);
-        setBookProgress({});
-        setSelectedBook(null);
-        setActiveChapterIndex(null);
-        setCurrentPage('dashboard');
-        setAuthStatus('UNAUTHENTICATED');
-        return;
-      }
-
-      setAuthStatus('AUTH_LOADING');
-      try {
-        const profile = await getAuthenticatedProfile(firebaseUser);
-        if (!active) return;
-        setUser(profile);
-        setAuthStatus('AUTHENTICATED');
-      } catch (error) {
-        console.error('Unable to load Firebase user profile:', error);
-        if (!active) return;
-        setUser(null);
-        setAuthStatus('UNAUTHENTICATED');
-      }
-    });
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
   }, []);
 
   useEffect(() => {
@@ -424,20 +395,29 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      const loadUserData = async () => {
-        const [loadedBooks, loadedVocab, loadedProgress] = await Promise.all([
-            getBooks(),
-            getUserVocab(user.id),
-            getUserProgress(user.id)
-        ]);
-        setBooks(loadedBooks);
-        setSavedWords(loadedVocab);
-        setBookProgress(loadedProgress);
-      };
-      loadUserData();
+    let active = true;
+    if (!user) {
+      setSavedWords([]);
+      setBookProgress({});
+      setSelectedBook(null);
+      setActiveChapterIndex(null);
+      setCurrentPage('dashboard');
+      return () => { active = false; };
     }
-  }, [user, currentPage]); 
+
+    const uid = user.id;
+    void Promise.all([getBooks(), getUserVocab(uid), getUserProgress(uid)]).then(([loadedBooks, loadedVocab, loadedProgress]) => {
+      if (!active || currentUserId.current !== uid) return;
+      setBooks(loadedBooks);
+      setSavedWords(loadedVocab);
+      setBookProgress(loadedProgress);
+    }).catch(() => {
+      // Authenticated reading remains available even when a non-authoritative
+      // data refresh fails; never apply another user's pending response.
+    });
+
+    return () => { active = false; };
+  }, [user?.id, currentPage]);
 
   useEffect(() => {
     let active = true;
@@ -447,13 +427,19 @@ const App = () => {
   }, [user?.id, currentPage]);
 
   const handleLogout = async () => {
-    setUser(null);
-    setAuthStatus('UNAUTHENTICATED');
+    clearSession();
     setSavedWords([]);
     setBookProgress({});
     setSelectedBook(null);
     setActiveChapterIndex(null);
     setCurrentPage('dashboard');
+    try {
+      await clearOwnedSecureStorage();
+    } catch (error) {
+      // A future native adapter must not prevent Firebase logout from failing
+      // closed if its own cleanup cannot complete.
+      console.warn('Secure storage cleanup failed:', error);
+    }
     try {
       await signOutUser();
     } catch (error) {
@@ -615,8 +601,13 @@ const App = () => {
     setIsQuizActive(false);
     // XP and streaks are changed only by submitVocabularyReview on the server.
     // Refreshing reads those authoritative aggregates without trusting quiz score.
-    void refreshAuthenticatedProfile().then(setUser).catch(() => undefined);
-    if (user) void loadLearningSummary(user.id).then(setLearningSummary).catch(() => undefined);
+    const uid = user?.id;
+    void refreshAuthenticatedProfile().then(profile => {
+      if (profile.id === currentUserId.current) setUser(profile);
+    }).catch(() => undefined);
+    if (uid) void loadLearningSummary(uid).then(summary => {
+      if (currentUserId.current === uid) setLearningSummary(summary);
+    }).catch(() => undefined);
   };
 
   const getDailyWordCountInternal = (currentWords: VocabularyWord[]) => {
