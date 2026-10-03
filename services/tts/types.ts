@@ -1,7 +1,7 @@
 export type ReaderTtsStatus = 'IDLE' | 'SPEAKING' | 'PAUSED' | 'ERROR';
 export type ReaderTtsCapabilities = { ttsAvailable: boolean; boundaryEventsSupported: boolean; pauseResumeSupported: boolean; voicesAvailable: boolean };
 export type ReaderTtsVoice = { id: string; name: string; language: string; localService: boolean; default: boolean };
-export type ReaderTtsBoundaryEvent = { charIndex: number; charLength?: number; name?: string };
+export type ReaderTtsBoundaryEvent = { charIndex: number; charLength?: number; name?: string; sessionId?: string };
 export type ReaderTtsRequest = { text: string; rate?: number; language?: string; preferredVoiceId?: string };
 export type ReaderTtsError = { code: 'not-supported' | 'synthesis-failed' | 'voice-unavailable' | 'canceled' | 'unknown'; message: string };
 export type ReaderTtsCallbacks = { onStart?: () => void; onBoundary?: (event: ReaderTtsBoundaryEvent) => void; onPause?: () => void; onResume?: () => void; onEnd?: () => void; onError?: (error: ReaderTtsError) => void };

@@ -81,6 +81,23 @@ workstation can synchronize native projects but cannot validate Android builds
 without an Android SDK/ADB, or iOS builds/signing without macOS, Xcode, and
 CocoaPods.
 
+### Native TTS adapter foundation
+
+Reader TTS continues to use the platform-neutral `ReaderTtsAdapter`. Web
+Speech remains the default fallback. The native adapter factory can select an
+Android TextToSpeech bridge or an iOS AVSpeechSynthesizer bridge when a future
+free native bridge is installed and available; otherwise it uses Web Speech
+only when that API is actually available. No native TTS plugin, Kotlin/Swift
+bridge, voice download, cloud API, generated audio file, or background-audio
+service is included yet.
+
+All adapters normalize `START`, `BOUNDARY`, `PAUSE`, `RESUME`, `END`, and
+`ERROR` events. Android range callbacks and iOS spoken ranges become the same
+JavaScript UTF-16 `charIndex`/optional `charLength` boundary shape consumed by
+the existing token synchronization engine, so repeated words retain their
+canonical Reader token identity. Background playback, lock-screen controls,
+and native runtime/device validation remain future work.
+
 ### Mobile auth and session foundation
 
 Firebase Auth remains the only authentication authority in the Capacitor
