@@ -4,7 +4,7 @@ import { BillingDomainError } from '../functions/src/billing/errors';
 import { AppleBillingProvider, getBillingProvider, GooglePlayBillingProvider, WebBillingProvider } from '../functions/src/billing/provider';
 import { BillingChannel, BillingVerificationRequest } from '../functions/src/billing/types';
 
-const request: BillingVerificationRequest = { productKey: 'PREMIUM_MONTHLY', providerTransactionId: 'untrusted-client-transaction', environment: 'SANDBOX' };
+const request: BillingVerificationRequest = { productKey: 'PREMIUM_MONTHLY', proof: 'untrusted-client-proof' };
 const expectCode = async (operation: () => Promise<unknown> | unknown, code: string) => {
   await expect(operation()).rejects.toMatchObject({ code });
 };

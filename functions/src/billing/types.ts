@@ -17,8 +17,8 @@ export type BillingProduct = {
 
 export type BillingVerificationRequest = {
   productKey: BillingProductKey;
-  providerTransactionId: string;
-  environment: BillingEnvironment;
+  // Opaque client evidence. Only the concrete provider adapter may interpret it.
+  proof: unknown;
 };
 
 export type NormalizedPurchase = {

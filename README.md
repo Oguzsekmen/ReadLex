@@ -135,6 +135,13 @@ subscription, after which the existing entitlement resolver remains authority.
 No provider account, credentials, live product IDs, payment SDK, checkout, or
 webhook is configured in this phase.
 
+`verifyPurchase` is an authenticated backend-only callable boundary. A future
+provider adapter must verify opaque client purchase proof before the server can
+atomically record a normalized payment and update `subscriptions/{uid}`. Client
+purchase success never grants entitlement. All current provider adapters and
+product mappings remain intentionally unconfigured, so requests fail closed
+until the relevant account credentials and live product IDs are added later.
+
 New vocabulary IDs are deterministic from language, normalized spelling, book,
 and chapter source. This prevents a repeat save of the same source word from
 creating another document, while allowing the word in a different book/chapter.

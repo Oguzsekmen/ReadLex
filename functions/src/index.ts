@@ -8,6 +8,7 @@ import { cancelImport, createImport, getImport, listImports, processOcrImport, p
 import { getBookLanguagePreflight, getBookLanguageProcessingStatus as getLanguageStatus, startBookLanguageProcessing as runLanguageProcessing } from './translation/service';
 import { submitVocabularyReview as submitReview } from './learning/reviewService';
 import { assignManualSubscription, getEntitlements, startTrial as beginTrial } from './subscriptions/service';
+import { verifyPurchaseForAuthenticatedRequest } from './billing/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -258,3 +259,4 @@ export const submitVocabularyReview = onCall(async (request) => {
 export const getMyEntitlements = onCall(async request => { if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.'); return getEntitlements(request.auth.uid); });
 export const startTrial = onCall(async request => { if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.'); return beginTrial(request.auth.uid); });
 export const adminAssignSubscription = onCall(async request => { requireAdmin(request); const input = request.data as Record<string, unknown>; return assignManualSubscription(input?.uid, input?.planId, input?.status, input?.currentPeriodEnd); });
+export const verifyPurchase = onCall(async request => verifyPurchaseForAuthenticatedRequest(request.auth?.uid, request.data));
