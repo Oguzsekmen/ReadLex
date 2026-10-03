@@ -1,0 +1,10 @@
+// @vitest-environment jsdom
+import React from 'react'; import { act, render } from '@testing-library/react'; import { describe, expect, it, vi } from 'vitest';
+const api=vi.hoisted(()=>({getMyEntitlements:vi.fn(),startTrial:vi.fn()})); vi.mock('../services/entitlements',async()=>({...await vi.importActual('../services/entitlements'),...api}));
+import { useEntitlements } from '../hooks/useEntitlements'; import { freeEntitlements } from '../services/entitlements';
+let value:any; const Probe=({uid}:{uid?:string})=>{value=useEntitlements(uid);return null}; const deferred=()=>{let resolve!: (v:any)=>void; const promise=new Promise(r=>resolve=r);return{promise,resolve}};
+describe('useEntitlements',()=>{
+ it('keeps unauthenticated users free without requests',async()=>{render(<Probe/>);await act(async()=>{});expect(value.isPremium).toBe(false);expect(api.getMyEntitlements).not.toHaveBeenCalled();});
+ it('loads and starts a server-returned trial',async()=>{api.getMyEntitlements.mockResolvedValue(freeEntitlements);api.startTrial.mockResolvedValue({...freeEntitlements,effectivePlan:'PREMIUM',entitlements:['FREE','PREMIUM'],isPremium:true,isTrialing:true});render(<Probe uid="a"/>);await act(async()=>{});await act(async()=>{await value.startTrial()});expect(value.isPremium).toBe(true);});
+ it('clears and ignores stale previous-user requests',async()=>{const a=deferred(),b=deferred();api.getMyEntitlements.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);const view=render(<Probe uid="a"/>);view.rerender(<Probe uid="b"/>);expect(value.isPremium).toBe(false);await act(async()=>b.resolve(freeEntitlements));await act(async()=>a.resolve({...freeEntitlements,effectivePlan:'PREMIUM',entitlements:['PREMIUM'],isPremium:true}));expect(value.isPremium).toBe(false);});
+});
