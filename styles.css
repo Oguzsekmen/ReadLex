@@ -8,13 +8,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Keep the Vite/Capacitor root viewport-height aware without imposing a
- * second safe-area inset on Reader-specific controls. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Keep the Vite/Capacitor root viewport-height aware. Fixed controls apply
+ * these tokens once at their own edge rather than adding global padding. */
 html,
 body,
 #root {
   min-height: 100dvh;
 }
+
+.safe-area-top { padding-top: var(--safe-top); }
+.safe-area-bottom { padding-bottom: var(--safe-bottom); }
+.safe-area-x { padding-left: var(--safe-left); padding-right: var(--safe-right); }
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;

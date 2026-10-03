@@ -52,6 +52,35 @@ not configured. The app uses `viewport-fit=cover` and safe-area-aware Reader
 controls; device behavior must still be smoke-tested on a real emulator or
 physical device before release.
 
+### Native navigation, lifecycle, and safe areas
+
+ReadLex uses custom in-memory view state, not React Router or browser-history
+interception. The official, MIT-licensed `@capacitor/app` plugin is used only
+inside `services/native/appLifecycle.ts`: it registers no listener on the web,
+handles Android hardware Back, and observes native foreground/background state.
+
+Android Back is ordered deliberately: open Reader/profile popups and the
+mobile menu close first; then Reader returns to its chapter list, the chapter
+list returns to the prior library view, quiz exits, and secondary app pages
+return to the dashboard. Only when no in-app state remains does the adapter use
+the official Android `App.exitApp()` fallback. It does not alter browser Back.
+Leaving Reader follows its existing unmount path, so Web Speech narration is
+stopped and debounced reading progress is flushed once. A background transition
+also asks the mounted Reader progress hook to flush; it never logs out or
+manually refreshes Firebase tokens. A real foreground transition may refresh
+the server-authoritative entitlement once, without polling or browser-clock
+decisions.
+
+The CSS safe-area tokens (`--safe-top`, `--safe-bottom`, `--safe-left`, and
+`--safe-right`) keep the shell header, chapter navigation, and Read Along
+player clear of system bars while using `100dvh` for mobile WebView layouts.
+The login form remains scrollable when the soft keyboard reduces the viewport;
+no Keyboard or StatusBar plugin is installed. Android edge-to-edge and iOS
+notch behavior still require emulator/device smoke testing. This Windows
+workstation can synchronize native projects but cannot validate Android builds
+without an Android SDK/ADB, or iOS builds/signing without macOS, Xcode, and
+CocoaPods.
+
 ### Mobile auth and session foundation
 
 Firebase Auth remains the only authentication authority in the Capacitor

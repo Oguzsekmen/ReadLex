@@ -21,13 +21,13 @@ const ChapterList: React.FC<ChapterListProps> = ({ book, progress, onSelectChapt
   const continueIndex = Math.min(completedChapters, totalChapters - 1);
 
   return (
-    <div className="min-h-screen bg-[#F0F4F8] dark:bg-gray-950 pb-20">
+    <div className="min-h-[100dvh] bg-[#F0F4F8] dark:bg-gray-950 pb-[calc(5rem+var(--safe-bottom))]">
       {/* Header with Cover */}
       <div className="relative h-64 md:h-80 w-full bg-gray-900 overflow-hidden">
         <img src={book.coverUrl} className="absolute inset-0 w-full h-full object-cover opacity-40 blur-sm" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#F0F4F8] dark:from-gray-950 to-transparent" />
         
-        <div className="absolute top-0 left-0 p-6 z-20">
+         <div className="absolute top-0 left-0 px-6 pb-6 pt-[calc(1.5rem+var(--safe-top))] z-20">
            <button onClick={onBack} className="bg-white/20 hover:bg-white/30 backdrop-blur-md p-3 rounded-full text-white transition-all">
              <ArrowLeft size={24} />
            </button>

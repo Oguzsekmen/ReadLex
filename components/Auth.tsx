@@ -75,7 +75,7 @@ const Auth: React.FC = () => {
   const clearMessages = () => { setError(''); setNotice(''); };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F0F4F8] dark:bg-gray-900 px-4 font-sans relative overflow-hidden">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-[#F0F4F8] dark:bg-gray-900 px-4 py-[max(1rem,var(--safe-top))] font-sans relative overflow-y-auto">
       <div className="absolute top-0 left-0 w-96 h-96 bg-brand-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30" />
       <button onClick={() => setLang(prev => prev === 'TR' ? 'EN' : 'TR')} className="absolute top-6 right-6 z-20 flex items-center bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-md font-bold text-gray-700 dark:text-gray-200 border border-gray-100 dark:border-gray-700">
         <Globe size={18} className="mr-2 text-brand-500" />{lang === 'TR' ? 'Türkçe' : 'English'}

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Profile from './components/Profile';
@@ -35,6 +35,8 @@ import { useEntitlements } from './hooks/useEntitlements';
 import { EntitlementData } from './services/entitlements';
 import { useFirebaseAuthSession } from './hooks/useFirebaseAuthSession';
 import { clearOwnedSecureStorage } from './services/native/secureStorage';
+import { NativeBackHandlerContext, useNativeAppLifecycle } from './hooks/useNativeAppLifecycle';
+import { NativeAppStateTransitionGuard } from './services/native/appLifecycle';
 
 // --- Vocabulary Wrapper ---
 const VocabularyWrapper = ({ user, words, onDelete }: { user: User, words: VocabularyWord[], onDelete: (id: string) => void }) => {
@@ -343,6 +345,34 @@ const App = () => {
   const [learningSummary, setLearningSummary] = useState<LearningSummaryData>(emptyLearningSummary);
   const entitlements = useEntitlements(user?.id);
   const currentUserId = useRef<string | null>(null);
+  const readerProgressFlush = useRef<(() => void) | undefined>();
+  const nativeAppState = useRef(new NativeAppStateTransitionGuard());
+
+  const registerReaderProgressFlush = useCallback((flush?: () => void) => {
+    readerProgressFlush.current = flush;
+  }, []);
+
+  const handleNativeRootBack = useCallback(() => {
+    if (isQuizActive) { setIsQuizActive(false); return true; }
+    if (activeChapterIndex !== null) { setActiveChapterIndex(null); return true; }
+    if (selectedBook) { setSelectedBook(null); return true; }
+    if (currentPage !== 'dashboard') { setCurrentPage('dashboard'); return true; }
+    return false;
+  }, [activeChapterIndex, currentPage, isQuizActive, selectedBook]);
+
+  const handleNativeAppState = useCallback((active: boolean) => {
+    const transition = nativeAppState.current.transition(active);
+    if (transition === 'background') {
+      readerProgressFlush.current?.();
+      return;
+    }
+    if (transition === 'foreground' && authStatus === 'AUTHENTICATED' && user?.id) void entitlements.refresh();
+  }, [authStatus, entitlements.refresh, user?.id]);
+
+  const registerNativeBackHandler = useNativeAppLifecycle({
+    onRootBack: handleNativeRootBack,
+    onAppStateChange: handleNativeAppState
+  });
 
   useEffect(() => {
     currentUserId.current = user?.id || null;
@@ -627,7 +657,7 @@ const App = () => {
 
   if (isLoading || authStatus === 'AUTH_LOADING') {
       return (
-          <div className="h-screen w-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
              <Loader2 size={48} className="text-brand-600 animate-spin mb-4" />
              <p className="text-gray-500 font-bold animate-pulse">Loading ReadLex...</p>
           </div>
@@ -673,6 +703,7 @@ const App = () => {
                   savedWords={savedWords}
                   onCompleteChapter={handleCompleteChapter}
                   onUpdateProgress={handleUpdateWordProgress}
+                  onProgressFlushReady={registerReaderProgressFlush}
                 />
             );
         } else {
@@ -735,7 +766,8 @@ const App = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <NativeBackHandlerContext.Provider value={registerNativeBackHandler}>
+    <div className="flex min-h-[100dvh] flex-col">
       {renderOfflineBanner()}
       <Layout 
         activePage={currentPage} 
@@ -756,6 +788,7 @@ const App = () => {
         {renderContent()}
       </Layout>
     </div>
+    </NativeBackHandlerContext.Provider>
   );
 };
 

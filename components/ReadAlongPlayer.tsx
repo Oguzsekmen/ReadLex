@@ -17,7 +17,7 @@ type Props = {
 };
 
 export const ReadAlongPlayer: React.FC<Props> = ({ speaking, paused, rate, progressPercent, canMovePrevious, canMoveNext, canRepeat, onPlayPause, onPrevious, onNext, onRepeat, onRateChange }) => (
-  <aside aria-label="Sesli okuma oynatıcısı" className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] sm:px-6">
+  <aside aria-label="Sesli okuma oynatıcısı" className="fixed inset-x-0 bottom-0 z-40 pl-[max(.75rem,var(--safe-left))] pr-[max(.75rem,var(--safe-right))] pb-[calc(.75rem+var(--safe-bottom))]">
     <div className="mx-auto max-w-3xl rounded-2xl border border-brand-200 bg-white/95 p-3 shadow-2xl backdrop-blur dark:border-brand-800 dark:bg-gray-900/95">
       <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-gray-600 dark:text-gray-300"><span>Sesli okuma</span><span>{Math.round(progressPercent)}%</span></div>
       <div aria-label="Okuma ilerlemesi" className="mb-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"><div className="h-full rounded-full bg-brand-600 transition-[width] duration-200" style={{ width: `${progressPercent}%` }} /></div>

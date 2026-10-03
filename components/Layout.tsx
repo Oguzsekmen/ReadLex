@@ -3,6 +3,7 @@ import { BookOpen, GraduationCap, LayoutDashboard, LogOut, Menu, User, X, Moon, 
 import { t } from '../services/i18n';
 import { User as UserType } from '../types';
 import { EntitlementData } from '../services/entitlements';
+import { useNativeBackHandler } from '../hooks/useNativeAppLifecycle';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -31,6 +32,11 @@ const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const lang = currentUser.languagePreference;
+  useNativeBackHandler(() => {
+    if (!isMobileMenuOpen) return false;
+    setIsMobileMenuOpen(false);
+    return true;
+  }, 200);
 
   const NavItem = ({ page, icon: Icon, label, extraClass = "" }: { page: string; icon: any; label: string, extraClass?: string }) => {
     const isActive = activePage === page || (activePage.startsWith(page) && page !== 'dashboard');
@@ -55,7 +61,7 @@ const Layout: React.FC<LayoutProps> = ({
   const showUpgrade = !entitlementLoading && !entitlement.isPremium;
 
   return (
-    <div className={`min-h-screen flex ${isDarkMode ? 'dark' : ''} bg-[#F0F4F8] dark:bg-gray-950 font-sans`}>
+    <div className={`min-h-[100dvh] flex ${isDarkMode ? 'dark' : ''} bg-[#F0F4F8] dark:bg-gray-950 font-sans`}>
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div 
@@ -69,7 +75,7 @@ const Layout: React.FC<LayoutProps> = ({
         fixed lg:static inset-y-0 left-0 z-50 w-72 bg-[#F8FAFC] dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-300 cubic-bezier(0.4, 0, 0.2, 1)
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        <div className="h-full flex flex-col p-4">
+        <div className="h-full flex flex-col p-4 pt-[calc(1rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))]">
           <div className="p-4 flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
               <div className="w-10 h-10 bg-gradient-to-tr from-brand-500 to-fun-pink rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/30 transform -rotate-6 overflow-hidden">
@@ -162,8 +168,8 @@ const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 overflow-y-auto h-screen relative">
-        <header className="lg:hidden bg-[#F8FAFC]/90 backdrop-blur-md dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between sticky top-0 z-30">
+      <main className="flex-1 min-w-0 overflow-y-auto h-[100dvh] relative">
+        <header className="lg:hidden bg-[#F8FAFC]/90 backdrop-blur-md dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 pb-4 pt-[calc(1rem+var(--safe-top))] flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
             <div className="w-8 h-8 bg-gradient-to-tr from-brand-500 to-fun-pink rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3">
               <BookOpen size={20} strokeWidth={3} />

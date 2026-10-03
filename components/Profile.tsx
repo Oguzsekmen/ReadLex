@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { User as UserIcon, Mail, Clock, Crown, Edit2, X } from 'lucide-react';
 import { t } from '../services/i18n';
+import { useNativeBackHandler } from '../hooks/useNativeAppLifecycle';
 
 interface ProfileProps {
   user: User;
@@ -30,6 +31,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
   const [isSaved, setIsSaved] = useState(false);
   const [timeLeft, setTimeLeft] = useState<{d: number, h: number, m: number} | null>(null);
   const lang = user.languagePreference;
+  useNativeBackHandler(() => {
+    if (!isAvatarModalOpen) return false;
+    setIsAvatarModalOpen(false);
+    return true;
+  }, 300);
 
   // Sync state with props when user updates
   useEffect(() => {
