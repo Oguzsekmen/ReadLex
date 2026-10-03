@@ -24,6 +24,8 @@
     "test:billing": "vitest run tests/billingDomain.test.ts",
     "test:billing-verification": "vitest run tests/billingVerification.test.ts",
     "test:billing-verification-emulator": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/billingVerification.test.mjs\"",
+    "test:web-billing": "vitest run tests/webBilling.test.ts",
+    "test:web-billing-emulator": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/webBilling.test.mjs\"",
     "test:entitlement-callables": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/entitlements.test.mjs\"",
     "test:frontend-entitlements": "vitest run tests/frontendEntitlements.test.ts",
     "test:entitlements-hook": "vitest run tests/useEntitlements.test.tsx",
@@ -37,8 +39,8 @@
     "test:ocr": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/ocr.test.mjs\"",
     "test:storage": "firebase emulators:exec --project demo-readlex-tests --only storage \"node --test tests/storage.rules.test.mjs\"",
     "test:translation": "npm --prefix functions run build && firebase emulators:exec --project demo-readlex-tests --only firestore \"node --test tests/translation.test.mjs\"",
-    "test:emulator": "npm run test:rules && npm run test:migrations && npm run test:imports && npm run test:ocr && npm run test:storage && npm run test:translation && npm run test:reviews && npm run test:billing-verification-emulator",
-    "test": "npm run test:compatibility && npm run test:reader && npm run test:reader-engine && npm run test:tts-sync && npm run test:tts-adapter && npm run test:react-harness && npm run test:tts-hook && npm run test:reader-tts && npm run test:read-along && npm run test:srs && npm run test:quiz && npm run test:stats && npm run test:learning-summary && npm run test:app-entitlements && npm run test:library-entitlements && npm run test:pricing-entitlements && npm run test:billing && npm run test:billing-verification && npm run test:emulator"
+    "test:emulator": "npm run test:rules && npm run test:migrations && npm run test:imports && npm run test:ocr && npm run test:storage && npm run test:translation && npm run test:reviews && npm run test:billing-verification-emulator && npm run test:web-billing-emulator",
+    "test": "npm run test:compatibility && npm run test:reader && npm run test:reader-engine && npm run test:tts-sync && npm run test:tts-adapter && npm run test:react-harness && npm run test:tts-hook && npm run test:reader-tts && npm run test:read-along && npm run test:srs && npm run test:quiz && npm run test:stats && npm run test:learning-summary && npm run test:app-entitlements && npm run test:library-entitlements && npm run test:pricing-entitlements && npm run test:billing && npm run test:billing-verification && npm run test:web-billing && npm run test:emulator"
   },
   "dependencies": {
     "@google/genai": "latest",

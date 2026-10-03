@@ -9,6 +9,7 @@ import { getBookLanguagePreflight, getBookLanguageProcessingStatus as getLanguag
 import { submitVocabularyReview as submitReview } from './learning/reviewService';
 import { assignManualSubscription, getEntitlements, startTrial as beginTrial } from './subscriptions/service';
 import { verifyPurchaseForAuthenticatedRequest } from './billing/service';
+import { createWebCheckoutForAuthenticatedRequest } from './billing/web/service';
 
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
@@ -260,3 +261,4 @@ export const getMyEntitlements = onCall(async request => { if (!request.auth?.ui
 export const startTrial = onCall(async request => { if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.'); return beginTrial(request.auth.uid); });
 export const adminAssignSubscription = onCall(async request => { requireAdmin(request); const input = request.data as Record<string, unknown>; return assignManualSubscription(input?.uid, input?.planId, input?.status, input?.currentPeriodEnd); });
 export const verifyPurchase = onCall(async request => verifyPurchaseForAuthenticatedRequest(request.auth?.uid, request.data));
+export const createWebCheckout = onCall(async request => createWebCheckoutForAuthenticatedRequest(request.auth?.uid, request.data));

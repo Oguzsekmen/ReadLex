@@ -142,6 +142,17 @@ purchase success never grants entitlement. All current provider adapters and
 product mappings remain intentionally unconfigured, so requests fail closed
 until the relevant account credentials and live product IDs are added later.
 
+### WEB billing adapter boundary
+
+The backend now has a WEB checkout and provider-notification adapter boundary,
+but no web payment provider is active. `createWebCheckout` requires Firebase
+Authentication and currently returns `PROVIDER_NOT_CONFIGURED`; it never
+accepts a client price, currency, UID, plan, or success status. ReadLex does
+not collect raw card data: a future provider must use an approved hosted or
+otherwise secure checkout flow, then verify its callback before routing a
+normalized purchase through the existing verification boundary. Future provider
+credentials belong in server environment/secret management only.
+
 New vocabulary IDs are deterministic from language, normalized spelling, book,
 and chapter source. This prevents a repeat save of the same source word from
 creating another document, while allowing the word in a different book/chapter.
