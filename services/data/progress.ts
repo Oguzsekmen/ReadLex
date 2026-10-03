@@ -37,11 +37,28 @@ export const getProgressEntries = async (uid: string): Promise<Record<string, Us
   return mergeProgressEntries(current, normalizeLegacyProgress(legacy.data()?.progress));
 };
 
+/**
+ * Firestore rejects `undefined` fields. Legacy and unprepared chapters do not
+ * have a content hash, so build the persisted shape explicitly rather than
+ * spreading the in-memory progress object into a Firestore write.
+ */
+export const progressFieldsForWrite = (progress: UserBookProgress) => ({
+  bookId: progress.bookId,
+  status: progress.status,
+  currentChapterIndex: progress.currentChapterIndex,
+  lastWordIndex: progress.lastWordIndex ?? 0,
+  ...(typeof progress.currentChapterId === 'string' ? { currentChapterId: progress.currentChapterId } : {}),
+  ...(typeof progress.progressPercent === 'number' ? { progressPercent: progress.progressPercent } : {}),
+  ...(typeof progress.chapterContentHash === 'string' && progress.chapterContentHash.length > 0
+    ? { chapterContentHash: progress.chapterContentHash }
+    : {})
+});
+
 export const saveProgressEntry = async (uid: string, progress: UserBookProgress) => {
   if (!db) throw new Error('Firestore is unavailable.');
   const completedAt = progress.status === 'COMPLETED' ? serverTimestamp() : null;
   return setDoc(doc(db, 'users', uid, 'progress', progress.bookId), {
-    ...progress,
+    ...progressFieldsForWrite(progress),
     lastReadAt: serverTimestamp(),
     completedAt,
     updatedAt: serverTimestamp()

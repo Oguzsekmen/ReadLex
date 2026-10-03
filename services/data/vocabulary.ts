@@ -50,13 +50,37 @@ export const getVocabularyEntries = async (uid: string): Promise<VocabularyEntry
   return mergeVocabularyEntries(current, legacyEntries);
 };
 
+/** Keep optional legacy fields out of Firestore writes when they are absent. */
+export const vocabularyFieldsForWrite = (entry: VocabularyEntry, id: string, normalizedWord: string) => ({
+  id,
+  word: entry.word,
+  translation: entry.translation,
+  definition: entry.definition,
+  exampleSentence: entry.exampleSentence,
+  type: entry.type,
+  level: entry.level,
+  sourceBookId: entry.sourceBookId,
+  nextReviewDate: entry.nextReviewDate,
+  strength: entry.strength,
+  normalizedWord,
+  ...(typeof entry.sourceChapterId === 'string' ? { sourceChapterId: entry.sourceChapterId } : {}),
+  ...(entry.createdAt !== undefined ? { createdAt: entry.createdAt } : {}),
+  ...(entry.nextReviewAt !== undefined ? { nextReviewAt: entry.nextReviewAt } : {}),
+  ...(entry.lastReviewedAt !== undefined ? { lastReviewedAt: entry.lastReviewedAt } : {}),
+  ...(typeof entry.correctCount === 'number' ? { correctCount: entry.correctCount } : {}),
+  ...(typeof entry.wrongCount === 'number' ? { wrongCount: entry.wrongCount } : {}),
+  ...(typeof entry.repetitions === 'number' ? { repetitions: entry.repetitions } : {}),
+  ...(typeof entry.intervalDays === 'number' ? { intervalDays: entry.intervalDays } : {}),
+  ...(typeof entry.easeFactor === 'number' ? { easeFactor: entry.easeFactor } : {})
+});
+
 export const saveVocabularyEntry = async (uid: string, entry: VocabularyEntry): Promise<VocabularyEntry> => {
   if (!db) throw new Error('Firestore is unavailable.');
   const id = vocabularyDocumentId(entry);
   const ref = doc(db, 'users', uid, 'vocabulary', id);
   const normalizedWord = entry.normalizedWord || normalizeWord(entry.word);
   const existing = await getDoc(ref);
-  await setDoc(ref, { ...entry, id, normalizedWord, ...(existing.exists() ? {} : { createdAt: serverTimestamp() }), updatedAt: serverTimestamp() }, { merge: true });
+  await setDoc(ref, { ...vocabularyFieldsForWrite(entry, id, normalizedWord), ...(existing.exists() ? {} : { createdAt: serverTimestamp() }), updatedAt: serverTimestamp() }, { merge: true });
   return { ...entry, id, normalizedWord };
 };
 
