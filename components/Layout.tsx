@@ -163,7 +163,7 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Main Content */}
       <main className="flex-1 min-w-0 overflow-y-auto h-screen relative">
-        <header className="lg:hidden bg-[#F8FAFC]/90 backdrop-blur-md dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between sticky top-0 z-30">
+        <header className="lg:hidden bg-[#F8FAFC]/90 backdrop-blur-md dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
             <div className="w-8 h-8 bg-gradient-to-tr from-brand-500 to-fun-pink rounded-lg flex items-center justify-center text-white shadow-md transform -rotate-3">
               <BookOpen size={20} strokeWidth={3} />

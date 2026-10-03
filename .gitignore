@@ -22,9 +22,13 @@ android/build/
 android/app/build/
 android/local.properties
 android/captures/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
 ios/App/build/
 ios/App/Pods/
 ios/DerivedData/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
 
 # Test output, logs, and temporary files
 coverage/

@@ -18,6 +18,40 @@ Prerequisite: Node.js 20 or later.
 3. Install dependencies with `npm install`.
 4. Run `npm run dev`, or verify a production bundle with `npm run build`.
 
+## Mobile development (Capacitor baseline)
+
+ReadLex has committed Capacitor 6 Android and iOS shells with the stable
+package identity `io.github.oguzsekmen.readlex`. The native shells load the
+local Vite bundle from `dist`; `capacitor.config.ts` deliberately contains no
+remote `server.url`, so packaged applications do not depend on a development
+server or CDN-hosted application assets.
+
+After changing web code, build and synchronize the local bundle:
+
+```sh
+npm run cap:sync
+# Or target a platform explicitly:
+npm run android:sync
+npm run ios:sync
+```
+
+Open Android Studio with `npm run android:open`. Android development requires
+Android Studio, an installed Android SDK, and a compatible JDK; no Android SDK
+is bundled or installed by this repository. The iOS project is generated and
+versioned here, but an iOS build requires macOS, Xcode, and CocoaPods:
+
+```sh
+npm run ios:sync
+npx cap open ios # run on macOS only
+```
+
+This phase adds only the native shell baseline. Native authentication provider
+adapters, native billing, native TTS, push notifications, deep links, secure
+storage, background execution, and store release configuration are intentionally
+not configured. The app uses `viewport-fit=cover` and safe-area-aware Reader
+controls; device behavior must still be smoke-tested on a real emulator or
+physical device before release.
+
 ## Firebase Authentication setup
 
 In the Firebase Console, add the configured web app and then:

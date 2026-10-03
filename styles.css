@@ -1,0 +1,26 @@
+@import '@fontsource/nunito/400.css';
+@import '@fontsource/nunito/600.css';
+@import '@fontsource/nunito/700.css';
+@import '@fontsource/nunito/800.css';
+@import '@fontsource/nunito/900.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Keep the Vite/Capacitor root viewport-height aware without imposing a
+ * second safe-area inset on Reader-specific controls. */
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
