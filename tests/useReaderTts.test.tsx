@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { useEffect } from 'react';
 import { act, render } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useReaderTts } from '../hooks/useReaderTts';
 import { FakeReaderTtsAdapter } from '../services/tts/fakeReaderTts';
 import { PreparedReaderToken } from '../services/readerLanguageData';
@@ -16,6 +16,16 @@ const mount = (adapter = new FakeReaderTtsAdapter()) => { let state: Exposed | u
 
 describe('useReaderTts', () => {
   it('is idle and never autoplays on mount', () => { const harness = mount(); expect(harness.state.status).toBe('IDLE'); expect(harness.adapter.request).toBeUndefined(); expect(harness.state.activeTokenIndex).toBeUndefined(); });
+  it('does not stop an idle adapter on mount or an unrelated rerender, but stops on unmount', () => {
+    const adapter = new FakeReaderTtsAdapter(); const stop = vi.spyOn(adapter, 'stop');
+    const Harness = ({ label }: { label: string }) => { useReaderTts(text, tokens, adapter); return <span>{label}</span>; };
+    const view = render(<Harness label="first" />);
+    expect(stop).not.toHaveBeenCalled();
+    view.rerender(<Harness label="second" />);
+    expect(stop).not.toHaveBeenCalled();
+    view.unmount();
+    expect(stop).toHaveBeenCalledOnce();
+  });
   it('maps boundaries to exact repeated canonical tokens and sentences', () => { const harness = mount(); act(() => harness.state.start()); expect(harness.adapter.request?.text).toBe(text); act(() => harness.adapter.boundary(0)); expect(harness.state.activeTokenIndex).toBe(0); expect(harness.state.activeSentenceId).toBe('s1'); act(() => harness.adapter.boundary(16)); expect(harness.state.activeTokenIndex).toBe(3); });
   it('starts suffixes from the requested canonical token and invalidates callbacks on unmount', () => { const harness = mount(); act(() => harness.state.startFromToken(1)); expect(harness.adapter.request?.text).toBe('opened the door. Next sentence.'); harness.view.unmount(); act(() => harness.adapter.boundary(0)); expect(harness.adapter.request?.text).toBe('opened the door. Next sentence.'); });
   it('pauses, resumes, stops, and navigates sentences without fake timing', () => { const harness = mount(); act(() => harness.state.start()); act(() => harness.adapter.boundary(16)); act(() => harness.state.pause()); expect(harness.state.paused).toBe(true); act(() => harness.state.resume()); expect(harness.state.speaking).toBe(true); act(() => harness.state.nextSentence()); expect(harness.adapter.request?.text).toBe('Next sentence.'); act(() => harness.state.stop()); expect(harness.state.status).toBe('IDLE'); });

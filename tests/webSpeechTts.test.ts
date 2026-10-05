@@ -33,7 +33,7 @@ describe('Web Speech adapter contract', () => {
     const adapter = new WebSpeechTtsAdapter();
     expect(adapter.getCapabilities()).toMatchObject({ ttsAvailable: true, voicesAvailable: false });
     adapter.speak({ text: 'Legacy chapter text.' });
-    expect(speech.cancel).toHaveBeenCalledOnce();
+    expect(speech.cancel).not.toHaveBeenCalled();
     expect(speech.speak).toHaveBeenCalledOnce();
     expect(speech.speak.mock.calls[0][0].text).toBe('Legacy chapter text.');
   });
@@ -60,5 +60,17 @@ describe('Web Speech adapter contract', () => {
     expect(firstEnd).not.toHaveBeenCalled();
     second.onboundary?.({ charIndex: 0, charLength: 6, name: 'word' });
     expect(secondBoundary).toHaveBeenCalledWith({ charIndex: 0, charLength: 6, name: 'word' });
+  });
+  it('never cancels unrelated browser speech while idle, but stops its owned narration', () => {
+    const { speech, MockUtterance } = installSpeech();
+    const adapter = new WebSpeechTtsAdapter();
+    speech.speak(new MockUtterance('manual browser speech'));
+    adapter.stop();
+    expect(speech.cancel).not.toHaveBeenCalled();
+    adapter.speak({ text: 'Reader narration' });
+    expect(speech.speak).toHaveBeenCalledTimes(2);
+    expect(speech.cancel).not.toHaveBeenCalled();
+    adapter.stop();
+    expect(speech.cancel).toHaveBeenCalledOnce();
   });
 });

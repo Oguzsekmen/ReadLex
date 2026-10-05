@@ -21,6 +21,7 @@ const tts = vi.hoisted(() => ({
   synchronizationSupported: true,
   useReaderTts: vi.fn(),
 }));
+const browserSpeech = vi.hoisted(() => ({ speak: vi.fn(), cancel: vi.fn() }));
 
 vi.mock('../hooks/useReaderTts', () => ({ useReaderTts: tts.useReaderTts }));
 vi.mock('../services/readerLanguageData', () => ({
@@ -60,6 +61,9 @@ describe('BookReader TTS integration', () => {
   beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
     Object.defineProperty(window, 'scrollTo', { configurable: true, value: vi.fn() });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: browserSpeech });
+    vi.stubGlobal('SpeechSynthesisUtterance', class { lang = ''; constructor(public text: string) {} });
+    browserSpeech.speak.mockReset(); browserSpeech.cancel.mockReset();
     tts.activeSentenceId = undefined;
     tts.activeTokenIndex = undefined;
     tts.followEnabled = true;
@@ -77,7 +81,7 @@ describe('BookReader TTS integration', () => {
     }));
   });
 
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: undefined }); });
 
   it('opens silently, keeps the player hidden, and starts from the current canonical position on user action', async () => {
     renderReader();
@@ -89,7 +93,7 @@ describe('BookReader TTS integration', () => {
     expect(screen.getByLabelText('Sesli okuma oynatıcısı')).toBeTruthy();
   });
 
-  it('keeps manual selection separate from the exact active repeated token and pauses before translation', async () => {
+  it('keeps manual selection separate from the exact active repeated token and stops narration before translation', async () => {
     tts.speaking = true;
     tts.activeTokenIndex = 2;
     tts.activeSentenceId = 's1';
@@ -101,10 +105,22 @@ describe('BookReader TTS integration', () => {
     expect(first.getAttribute('data-tts-active')).toBeNull();
     expect(first.getAttribute('data-tts-sentence')).toBe('true');
     fireEvent.click(first);
-    await waitFor(() => expect(tts.pause).toHaveBeenCalledOnce());
+    await waitFor(() => expect(tts.stop).toHaveBeenCalledOnce());
     expect(first.className).toContain('bg-brand-700');
     expect(second.getAttribute('data-tts-active')).toBe('true');
     expect(screen.getByText('Hazırlanmış çeviri verisi kullanılamıyor.')).toBeTruthy();
+  });
+
+  it('keeps popup word pronunciation independent from idle Reader narration state', async () => {
+    renderReader();
+    await screen.findByRole('button', { name: 'Door çevirisini göster' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Door çevirisini göster' }).parentElement?.getAttribute('data-token-end')).toBe('2'));
+    const first = screen.getByRole('button', { name: 'Door çevirisini göster' });
+    fireEvent.click(first);
+    const speaker = await screen.findByRole('button', { name: 'Kelimeyi telaffuz et' });
+    fireEvent.click(speaker);
+    expect(browserSpeech.speak).toHaveBeenCalledOnce();
+    expect(browserSpeech.cancel).not.toHaveBeenCalled();
   });
 
   it('routes player sentence, rate, and return-to-follow actions without fabricating a time line', async () => {
