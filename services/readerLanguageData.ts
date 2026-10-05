@@ -10,6 +10,35 @@ export type UnavailableChapter = { mode: 'unavailable'; reason: 'NOT_PREPARED' |
 export type ReaderLanguageChapter = PreparedChapter | UnavailableChapter;
 export type ReaderLanguageResolution = { state: 'ready'; token: PreparedReaderToken; dictionary?: DictionaryEntry; sentence?: PreparedSentence } | { state: 'unavailable'; reason: UnavailableChapter['reason'] };
 
+const LEGACY_READER_TOKEN_PATTERN = /[\p{L}\p{N}_’']+|[^\p{L}\p{N}\s]|\r\n|\r|\n|[ \t\f\v]+/gu;
+const LEGACY_SENTENCE_END = /^[.!?]+$/;
+
+/**
+ * Legacy chapters have no prepared translation records, but their visible
+ * source text is still a canonical narration source. These offsets are UTF-16
+ * indexes into that exact source string, matching Web Speech boundary events.
+ */
+export const legacyReaderTokens = (content: string): PreparedReaderToken[] => {
+  let sentence = 0;
+  let index = 0;
+  return [...content.matchAll(LEGACY_READER_TOKEN_PATTERN)].map(match => {
+    const text = match[0];
+    const start = match.index ?? 0;
+    const isWord = /[\p{L}\p{N}]/u.test(text);
+    const token: PreparedReaderToken = {
+      index: index++,
+      text,
+      normalized: isWord ? text.toLocaleLowerCase('en-US') : null,
+      start,
+      end: start + text.length,
+      sentenceId: `legacy-sentence-${sentence}`,
+      isWord,
+    };
+    if (LEGACY_SENTENCE_END.test(text)) sentence += 1;
+    return token;
+  });
+};
+
 export class LatestTapGuard {
   private latest = 0;
   next() { this.latest += 1; return this.latest; }

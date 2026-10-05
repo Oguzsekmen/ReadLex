@@ -24,6 +24,7 @@ const tts = vi.hoisted(() => ({
 
 vi.mock('../hooks/useReaderTts', () => ({ useReaderTts: tts.useReaderTts }));
 vi.mock('../services/readerLanguageData', () => ({
+  legacyReaderTokens: (content: string) => [...content.matchAll(/[A-Za-z]+/g)].map((match, index) => ({ index, text: match[0], normalized: match[0].toLowerCase(), start: match.index || 0, end: (match.index || 0) + match[0].length, sentenceId: 'legacy-sentence-0', isWord: true })),
   LatestTapGuard: class {
     private request = 0;
     next() { return ++this.request; }
@@ -93,9 +94,10 @@ describe('BookReader TTS integration', () => {
     tts.activeTokenIndex = 2;
     tts.activeSentenceId = 's1';
     renderReader();
-    const first = await screen.findByRole('button', { name: 'Door çevirisini göster' });
+    await screen.findByRole('button', { name: 'Door çevirisini göster' });
     const second = screen.getByRole('button', { name: 'door çevirisini göster' });
-    expect(second.getAttribute('data-tts-active')).toBe('true');
+    await waitFor(() => expect(second.getAttribute('data-tts-active')).toBe('true'));
+    const first = screen.getByRole('button', { name: 'Door çevirisini göster' });
     expect(first.getAttribute('data-tts-active')).toBeNull();
     expect(first.getAttribute('data-tts-sentence')).toBe('true');
     fireEvent.click(first);
@@ -135,5 +137,16 @@ describe('BookReader TTS integration', () => {
     expect(activeCandidate.getAttribute('data-tts-active')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Sonraki Bölüm/i }));
     expect(tts.stop).toHaveBeenCalledOnce();
+  });
+
+  it('supplies legacy chapter source and fallback tokens to TTS without requiring translations', async () => {
+    const legacyBook = { ...book, languageProcessingStatus: 'NOT_STARTED', chapters: [{ id: 'legacy', title: 'Legacy', content: 'Legacy English chapter.' }] };
+    render(<BookReaderV2 book={legacyBook} initialChapterIndex={0} onBack={vi.fn()} onSaveWord={vi.fn()} savedWords={[]} onCompleteChapter={vi.fn()} onUpdateProgress={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Legacy çevirisini göster' });
+    await waitFor(() => expect(tts.useReaderTts).toHaveBeenLastCalledWith('Legacy English chapter.', expect.arrayContaining([
+      expect.objectContaining({ text: 'Legacy', start: 0, isWord: true }),
+    ])));
+    fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
+    expect(tts.startFromToken).toHaveBeenCalledWith(0);
   });
 });
