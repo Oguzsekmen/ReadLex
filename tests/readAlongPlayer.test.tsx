@@ -9,9 +9,8 @@ describe("ReadAlongPlayer", () => {
   it("renders token progress and routes controls to hook actions", () => {
     const actions = {
       onPlayPause: vi.fn(),
-      onPrevious: vi.fn(),
-      onNext: vi.fn(),
-      onRepeat: vi.fn(),
+      onBackThreeWords: vi.fn(),
+      onForwardThreeWords: vi.fn(),
       onRateChange: vi.fn(),
       onClose: vi.fn(),
     };
@@ -23,28 +22,26 @@ describe("ReadAlongPlayer", () => {
         progressPercent={34}
         canMovePrevious
         canMoveNext
-        canRepeat
+        bounds={{ left: 128, width: 640 }}
         {...actions}
       />,
     );
     expect(screen.getByText("34%")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Sesli okumayı başlat"));
-    fireEvent.click(screen.getByLabelText("Önceki cümle"));
-    fireEvent.click(screen.getByLabelText("Sonraki cümle"));
-    fireEvent.click(screen.getByLabelText("Cümleyi tekrar oku"));
+    fireEvent.click(screen.getByLabelText("3 kelime geri git"));
+    fireEvent.click(screen.getByLabelText("3 kelime ileri git"));
     fireEvent.click(screen.getByLabelText("Sesli okumayı kapat"));
-    fireEvent.change(screen.getByLabelText("Okuma hızı"), {
+    fireEvent.change(screen.getByLabelText("Okuma hızını değiştir"), {
       target: { value: "1.25" },
     });
     expect(actions.onPlayPause).toHaveBeenCalledOnce();
-    expect(actions.onPrevious).toHaveBeenCalledOnce();
-    expect(actions.onNext).toHaveBeenCalledOnce();
-    expect(actions.onRepeat).toHaveBeenCalledOnce();
+    expect(actions.onBackThreeWords).toHaveBeenCalledOnce();
+    expect(actions.onForwardThreeWords).toHaveBeenCalledOnce();
     expect(actions.onClose).toHaveBeenCalledOnce();
     expect(actions.onRateChange).toHaveBeenCalledWith(1.25);
   });
 
-  it("shows pause while speaking and disables unavailable sentence actions", () => {
+  it("is fixed, constrained, and disables unavailable word navigation", () => {
     render(
       <ReadAlongPlayer
         speaking
@@ -53,26 +50,26 @@ describe("ReadAlongPlayer", () => {
         progressPercent={0}
         canMovePrevious={false}
         canMoveNext={false}
-        canRepeat={false}
+        bounds={{ left: 96, width: 720 }}
         onPlayPause={vi.fn()}
-        onPrevious={vi.fn()}
-        onNext={vi.fn()}
-        onRepeat={vi.fn()}
+        onBackThreeWords={vi.fn()}
+        onForwardThreeWords={vi.fn()}
         onRateChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Duraklat")).toBeTruthy();
-    expect(screen.getByLabelText("Önceki cümle")).toHaveProperty(
+    expect(screen.getByLabelText("Sesli okumayı duraklat")).toBeTruthy();
+    expect(screen.getByLabelText("3 kelime geri git")).toHaveProperty(
       "disabled",
       true,
     );
-    expect(screen.getByLabelText("Sonraki cümle")).toHaveProperty(
+    expect(screen.getByLabelText("3 kelime ileri git")).toHaveProperty(
       "disabled",
       true,
     );
     expect(
       screen.getByLabelText("Sesli okuma oynatıcısı").className,
-    ).not.toContain("fixed");
+    ).toContain("fixed");
+    expect(screen.getByLabelText("Sesli okuma oynatıcısı").style.width).toContain("720px");
   });
 });

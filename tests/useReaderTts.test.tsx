@@ -30,6 +30,18 @@ describe('useReaderTts', () => {
   it('maps boundaries to exact repeated canonical tokens and sentences', () => { const harness = mount(); act(() => harness.state.start()); expect(harness.adapter.request?.text).toBe(text); act(() => harness.adapter.boundary(0)); expect(harness.state.activeTokenIndex).toBe(0); expect(harness.state.activeSentenceId).toBe('s1'); act(() => harness.adapter.boundary(16)); expect(harness.state.activeTokenIndex).toBe(3); });
   it('starts suffixes from the requested canonical token and invalidates callbacks on unmount', () => { const harness = mount(); act(() => harness.state.startFromToken(1)); expect(harness.adapter.request?.text).toBe('opened the door. Next sentence.'); harness.view.unmount(); act(() => harness.adapter.boundary(0)); expect(harness.adapter.request?.text).toBe('opened the door. Next sentence.'); });
   it('pauses, resumes, stops, and navigates sentences without fake timing', () => { const harness = mount(); act(() => harness.state.start()); act(() => harness.adapter.boundary(16)); act(() => harness.state.pause()); expect(harness.state.paused).toBe(true); act(() => harness.state.resume()); expect(harness.state.speaking).toBe(true); act(() => harness.state.nextSentence()); expect(harness.adapter.request?.text).toBe('Next sentence.'); act(() => harness.state.stop()); expect(harness.state.status).toBe('IDLE'); });
+  it('moves exactly three canonical spoken words and clamps at chapter boundaries', () => {
+    const harness = mount();
+    act(() => harness.state.start());
+    act(() => harness.adapter.boundary(16));
+    act(() => harness.state.moveByWords(-3));
+    expect(harness.adapter.request?.text).toBe(text);
+    act(() => harness.adapter.boundary(0));
+    act(() => harness.state.moveByWords(3));
+    expect(harness.adapter.request?.text).toBe('door. Next sentence.');
+    act(() => harness.state.moveByWords(99));
+    expect(harness.adapter.request?.text).toBe('sentence.');
+  });
   it('narrates legacy chapter text with fallback tokens when translation preparation is unavailable', () => {
     const adapter = new FakeReaderTtsAdapter(); let state: Exposed | undefined;
     const Harness = () => { const value = useReaderTts('Legacy door text.', [], adapter); useEffect(() => { state = value; }); return null; };

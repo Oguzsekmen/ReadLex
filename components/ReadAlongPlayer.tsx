@@ -1,5 +1,5 @@
 import React from "react";
-import { Pause, Play, Repeat2, SkipBack, SkipForward, X } from "lucide-react";
+import { AudioLines, Pause, Play, RotateCcw, RotateCw, X } from "lucide-react";
 
 type Props = {
   speaking: boolean;
@@ -8,11 +8,10 @@ type Props = {
   progressPercent: number;
   canMovePrevious: boolean;
   canMoveNext: boolean;
-  canRepeat: boolean;
+  bounds?: { left: number; width: number };
   onPlayPause: () => void;
-  onPrevious: () => void;
-  onNext: () => void;
-  onRepeat: () => void;
+  onBackThreeWords: () => void;
+  onForwardThreeWords: () => void;
   onRateChange: (rate: number) => void;
   onClose: () => void;
 };
@@ -24,99 +23,56 @@ export const ReadAlongPlayer: React.FC<Props> = ({
   progressPercent,
   canMovePrevious,
   canMoveNext,
-  canRepeat,
+  bounds,
   onPlayPause,
-  onPrevious,
-  onNext,
-  onRepeat,
+  onBackThreeWords,
+  onForwardThreeWords,
   onRateChange,
   onClose,
-}) => (
-  <aside
-    aria-label="Sesli okuma oynatıcısı"
-    className="mt-10 w-full border-t border-brand-100 pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] pt-6 dark:border-brand-900"
-  >
-    <div className="rounded-2xl border border-brand-200 bg-brand-50/70 p-3 shadow-sm dark:border-brand-800 dark:bg-gray-950/60">
-      <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-gray-600 dark:text-gray-300">
-        <span>Sesli okuma</span>
-        <div className="flex items-center gap-2">
-          <span>{Math.round(progressPercent)}%</span>
-          <button
-            aria-label="Sesli okumayı kapat"
-            title="Sesli okumayı kapat"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-gray-500 hover:bg-white/80 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-white"
-          >
-            <X size={17} />
-          </button>
+}) => {
+  const status = speaking
+    ? "Metin okunuyor..."
+    : paused
+      ? "Okuma duraklatıldı"
+      : "Okumaya hazır";
+  const position = bounds
+    ? {
+        left: `max(var(--safe-left), ${Math.max(12, bounds.left)}px)`,
+        width: `min(${bounds.width}px, calc(100vw - var(--safe-left) - var(--safe-right) - 24px))`,
+      }
+    : {
+        left: "max(var(--safe-left), 12px)",
+        right: "max(var(--safe-right), 12px)",
+      };
+  return (
+    <aside
+      aria-label="Sesli okuma oynatıcısı"
+      data-reader-player="floating"
+      style={position}
+      className="fixed bottom-[calc(1rem+var(--safe-bottom))] z-40 rounded-[20px] border border-brand-500/20 bg-[#faf8ff]/65 p-3.5 shadow-[0_8px_28px_rgba(60,40,120,0.13)] backdrop-blur-[14px] dark:border-brand-400/20 dark:bg-gray-950/65 sm:p-4"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/15 text-brand-700 dark:text-brand-300 ${speaking ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true">
+            <AudioLines size={20} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-black text-gray-900 dark:text-white">Sesli okuma</p>
+            <p aria-live="polite" className="truncate text-xs font-medium text-gray-600 dark:text-gray-300">{status}</p>
+          </div>
         </div>
+        <span className="text-xs font-black tabular-nums text-brand-700 dark:text-brand-300">{Math.round(progressPercent)}%</span>
       </div>
-      <div
-        aria-label="Okuma ilerlemesi"
-        className="mb-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
-      >
-        <div
-          className="h-full rounded-full bg-brand-600 transition-[width] duration-200"
-          style={{ width: `${progressPercent}%` }}
-        />
+      <div aria-label="Metin okuma ilerlemesi" className="mb-3 h-1.5 overflow-hidden rounded-full bg-brand-200/70 dark:bg-brand-950/80">
+        <div className="h-full rounded-full bg-brand-600 transition-[width] duration-150 motion-reduce:transition-none" style={{ width: `${progressPercent}%` }} />
       </div>
-      <div className="flex items-center justify-between gap-1">
-        <button
-          aria-label="Önceki cümle"
-          title="Önceki cümle"
-          disabled={!canMovePrevious}
-          onClick={onPrevious}
-          className="rounded-xl p-3 text-gray-600 disabled:opacity-30 dark:text-gray-300"
-        >
-          <SkipBack size={20} />
-        </button>
-        <button
-          aria-label={speaking ? "Duraklat" : "Sesli okumayı başlat"}
-          onClick={onPlayPause}
-          className="rounded-full bg-brand-600 p-4 text-white shadow-lg"
-        >
-          <>
-            {speaking ? (
-              <Pause size={24} fill="currentColor" />
-            ) : (
-              <Play size={24} fill="currentColor" />
-            )}
-          </>
-        </button>
-        <button
-          aria-label="Sonraki cümle"
-          title="Sonraki cümle"
-          disabled={!canMoveNext}
-          onClick={onNext}
-          className="rounded-xl p-3 text-gray-600 disabled:opacity-30 dark:text-gray-300"
-        >
-          <SkipForward size={20} />
-        </button>
-        <button
-          aria-label="Cümleyi tekrar oku"
-          title="Cümleyi tekrar oku"
-          disabled={!canRepeat}
-          onClick={onRepeat}
-          className="rounded-xl p-3 text-gray-600 disabled:opacity-30 dark:text-gray-300"
-        >
-          <Repeat2 size={20} />
-        </button>
-        <select
-          aria-label="Okuma hızı"
-          value={rate}
-          onChange={(event) => onRateChange(Number(event.target.value))}
-          className="rounded-lg border bg-transparent px-2 py-2 text-xs font-bold dark:border-gray-700"
-        >
-          {[0.75, 1, 1.25, 1.5].map((value) => (
-            <option key={value} value={value}>
-              {value}x
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-[44px_44px_minmax(56px,1fr)_44px_52px] items-center justify-items-center gap-1 sm:grid-cols-[48px_48px_minmax(60px,1fr)_48px_56px] sm:gap-2">
+        <button aria-label="Sesli okumayı kapat" title="Sesli okumayı kapat" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-brand-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-gray-200"><X size={19} /></button>
+        <button aria-label="3 kelime geri git" title="3 kelime geri git" disabled={!canMovePrevious} onClick={onBackThreeWords} className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-brand-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-200"><RotateCcw size={20} /><span className="sr-only">3</span></button>
+        <button aria-label={speaking ? "Sesli okumayı duraklat" : "Sesli okumayı başlat"} title={speaking ? "Sesli okumayı duraklat" : "Sesli okumayı başlat"} onClick={onPlayPause} className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-500/30 transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">{speaking ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</button>
+        <button aria-label="3 kelime ileri git" title="3 kelime ileri git" disabled={!canMoveNext} onClick={onForwardThreeWords} className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-brand-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-200"><RotateCw size={20} /><span className="sr-only">3</span></button>
+        <label className="flex h-11 min-w-[44px] items-center justify-center rounded-xl text-xs font-black text-gray-700 hover:bg-brand-500/10 dark:text-gray-200"><span className="sr-only">Okuma hızını değiştir</span><select aria-label="Okuma hızını değiştir" value={rate} onChange={(event) => onRateChange(Number(event.target.value))} className="w-full cursor-pointer appearance-none bg-transparent text-center outline-none">{[0.75, 1, 1.25, 1.5].map((value) => <option key={value} value={value}>{value}x</option>)}</select></label>
       </div>
-      {paused && (
-        <p className="mt-2 text-center text-xs text-gray-500">Duraklatıldı</p>
-      )}
-    </div>
-  </aside>
-);
+    </aside>
+  );
+};

@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -107,6 +108,10 @@ const BookReaderV2: React.FC<Props> = ({
   const [ttsActivated, setTtsActivated] = useState(false);
   const [ttsMessage, setTtsMessage] = useState<string | null>(null);
   const articleRef = useRef<HTMLElement>(null);
+  const readerCardRef = useRef<HTMLDivElement>(null);
+  const [playerBounds, setPlayerBounds] = useState<
+    { left: number; width: number } | undefined
+  >();
   const latestTap = useRef(new LatestTapGuard());
   const scrollFrame = useRef<number>();
   const resumedChapter = useRef<string>();
@@ -180,6 +185,50 @@ const BookReaderV2: React.FC<Props> = ({
     activeSpokenPosition < 0 || !spokenTokens.length
       ? 0
       : ((activeSpokenPosition + 1) * 100) / spokenTokens.length;
+  const playerSpokenPosition =
+    activeSpokenPosition >= 0
+      ? activeSpokenPosition
+      : Math.max(
+          0,
+          spokenTokens.findIndex((token) => token.index === progress.tokenIndex),
+        );
+  useLayoutEffect(() => {
+    const element = readerCardRef.current;
+    if (!element || !(ttsActivated || tts.speaking || tts.paused)) return;
+    const measure = () => {
+      const rect = element.getBoundingClientRect();
+      setPlayerBounds({ left: rect.left, width: rect.width });
+    };
+    measure();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(measure);
+    observer?.observe(element);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tts.paused, tts.speaking, ttsActivated]);
+  useEffect(() => {
+    if (tts.activeTokenIndex === undefined || languageChapter?.mode !== "prepared")
+      return;
+    const block = preparedBlocks.findIndex(
+      (value) =>
+        value.startTokenIndex <= tts.activeTokenIndex! &&
+        value.endTokenIndex >= tts.activeTokenIndex!,
+    );
+    if (block >= visibleBlocks) setVisibleBlocks(block + 1);
+  }, [languageChapter?.mode, preparedBlocks, tts.activeTokenIndex, visibleBlocks]);
+  useEffect(() => {
+    if (tts.activeTokenIndex === undefined) return;
+    readAlongDebug("reader active token", {
+      activeTokenIndex: tts.activeTokenIndex,
+      activeSentenceId: tts.activeSentenceId,
+      renderedTokenId: `reader-token-${tts.activeTokenIndex}`,
+    });
+  }, [tts.activeSentenceId, tts.activeTokenIndex]);
   useEffect(() => {
     if (tts.activeTokenIndex !== undefined)
       updateProgress({
@@ -577,7 +626,7 @@ const BookReaderV2: React.FC<Props> = ({
         onClick={(event) => void selectWord(token, event)}
         role="button"
         aria-label={`${token.text} çevirisini göster`}
-        className={`inline-block cursor-pointer touch-manipulation select-none rounded-md px-0.5 transition-all ${sentenceActive ? "bg-brand-50/80 dark:bg-brand-950/40" : ""} ${ttsActive ? "bg-brand-600 px-1 text-white shadow-sm dark:bg-brand-500" : ""} ${isSaved(token.text, token.normalized) ? "bg-yellow-100 underline decoration-2" : progress.tokenIndex === token.index ? "text-red-600 underline decoration-2" : "hover:bg-brand-50 hover:text-brand-600"} ${active ? "bg-brand-700 px-2 text-white shadow-lg" : ""}`}
+        className={`cursor-pointer touch-manipulation select-none rounded-[6px] transition-colors duration-150 motion-reduce:transition-none ${sentenceActive ? "bg-brand-500/[0.07] dark:bg-brand-400/[0.08]" : ""} ${ttsActive ? "bg-brand-500/25 text-brand-900 shadow-[0_1px_5px_rgba(124,77,255,0.15)] ring-1 ring-brand-500/20 dark:bg-brand-400/25 dark:text-brand-100" : ""} ${isSaved(token.text, token.normalized) ? "bg-yellow-100 underline decoration-2" : progress.tokenIndex === token.index ? "text-red-600 underline decoration-2" : "hover:bg-brand-50 hover:text-brand-600"} ${active ? "bg-brand-700 text-white shadow-lg" : ""}`}
       >
         {token.text}
       </span>
@@ -663,7 +712,7 @@ const BookReaderV2: React.FC<Props> = ({
             ))}
           </div>
         )}
-        <div data-reader-chapter-card="true" className="rounded-[2rem] border bg-white p-6 shadow-sm dark:bg-gray-900 md:p-16">
+        <div ref={readerCardRef} data-reader-chapter-card="true" className={`rounded-[2rem] border bg-white p-6 shadow-sm dark:bg-gray-900 md:p-16 ${(ttsActivated || tts.speaking || tts.paused) ? "pb-64 md:pb-60" : ""}`}>
           <header className="mb-10 border-b pb-7 text-center">
             <p className="mb-2 text-xs font-bold uppercase tracking-widest text-brand-600">
               Chapter {chapterIndex + 1}
@@ -758,13 +807,12 @@ const BookReaderV2: React.FC<Props> = ({
               paused={tts.paused}
               rate={tts.rate}
               progressPercent={ttsProgress}
-              canMovePrevious={tts.activeTokenIndex !== undefined}
-              canMoveNext={tts.activeTokenIndex !== undefined}
-              canRepeat={!!tts.activeSentenceId}
+              bounds={playerBounds}
+              canMovePrevious={playerSpokenPosition > 0}
+              canMoveNext={playerSpokenPosition >= 0 && playerSpokenPosition < spokenTokens.length - 1}
               onPlayPause={toggleTtsPlayback}
-              onPrevious={tts.previousSentence}
-              onNext={tts.nextSentence}
-              onRepeat={tts.repeatCurrentSentence}
+              onBackThreeWords={() => tts.moveByWords(-3)}
+              onForwardThreeWords={() => tts.moveByWords(3)}
               onRateChange={tts.setRate}
               onClose={closeReadAlong}
             />

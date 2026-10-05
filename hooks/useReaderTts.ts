@@ -32,6 +32,10 @@ export const useReaderTts = (
     () => (tokens.length ? tokens : legacyReaderTokens(text)),
     [text, tokens.length ? tokens : text],
   );
+  const spokenTokens = useMemo(
+    () => narrationTokens.filter((token) => token.isWord),
+    [narrationTokens],
+  );
   const session = useRef(0);
   const resumeToken = useRef<number>();
   const source = useRef<
@@ -154,6 +158,8 @@ export const useReaderTts = (
               if (!token) return;
               readAlongDebug("boundary", {
                 chunkIndex,
+                localCharIndex: event.charIndex,
+                globalCharIndex: chunk.globalStartChar + event.charIndex,
                 tokenIndex: token.index,
                 sentenceId: token.sentenceId,
               });
@@ -243,6 +249,21 @@ export const useReaderTts = (
     const token = resolver(narrationTokens, activeTokenIndex);
     if (token) startFromToken(token.index);
   };
+  const moveByWords = useCallback(
+    (delta: number) => {
+      if (!spokenTokens.length) return;
+      const current = activeTokenIndex ?? resumeToken.current;
+      const currentPosition = spokenTokens.findIndex(
+        (token) => token.index === current,
+      );
+      const position = currentPosition < 0 ? 0 : currentPosition;
+      const target = spokenTokens[
+        Math.max(0, Math.min(spokenTokens.length - 1, position + delta))
+      ];
+      if (target) startFromToken(target.index);
+    },
+    [activeTokenIndex, spokenTokens, startFromToken],
+  );
   return {
     supported: capabilities.ttsAvailable,
     synchronizationSupported: capabilities.boundaryEventsSupported,
@@ -270,5 +291,6 @@ export const useReaderTts = (
       ),
     previousSentence: () => sentence(findPreviousSentenceStartToken),
     nextSentence: () => sentence(findNextSentenceStartToken),
+    moveByWords,
   };
 };
