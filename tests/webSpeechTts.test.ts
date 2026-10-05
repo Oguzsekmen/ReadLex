@@ -86,4 +86,16 @@ describe('Web Speech adapter contract', () => {
     expect(speech.cancel).not.toHaveBeenCalled();
     expect(speech.speak).toHaveBeenCalledTimes(2);
   });
+
+  it('ignores a stale end callback after Read Along is closed', () => {
+    const { speech } = installSpeech();
+    const adapter = new WebSpeechTtsAdapter();
+    const end = vi.fn();
+    adapter.speak({ text: 'Reader narration' }, { onEnd: end });
+    const utterance = speech.speak.mock.calls[0][0];
+    adapter.stop();
+    utterance.onend?.();
+    expect(speech.cancel).toHaveBeenCalledOnce();
+    expect(end).not.toHaveBeenCalled();
+  });
 });

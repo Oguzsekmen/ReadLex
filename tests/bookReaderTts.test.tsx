@@ -113,16 +113,42 @@ describe('BookReader TTS integration', () => {
     expect(screen.getByText('Hazırlanmış çeviri verisi kullanılamıyor.')).toBeTruthy();
   });
 
-  it('keeps popup word pronunciation independent from idle Reader narration state', async () => {
+  it('keeps popup word pronunciation independent after opening Read Along without playing', async () => {
     renderReader();
     await screen.findByRole('button', { name: 'Door çevirisini göster' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Door çevirisini göster' }).parentElement?.getAttribute('data-token-end')).toBe('2'));
     const first = screen.getByRole('button', { name: 'Door çevirisini göster' });
+    fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
+    expect(tts.startFromToken).not.toHaveBeenCalled();
     fireEvent.click(first);
     const speaker = await screen.findByRole('button', { name: 'Kelimeyi telaffuz et' });
     fireEvent.click(speaker);
     expect(browserSpeech.speak).toHaveBeenCalledOnce();
     expect(browserSpeech.cancel).not.toHaveBeenCalled();
+  });
+
+  it('renders the player inside the chapter card and closes it without leaving the Reader', async () => {
+    const onBack = vi.fn();
+    render(<BookReaderV2 book={book} initialChapterIndex={0} onBack={onBack} onSaveWord={vi.fn()} savedWords={[]} onCompleteChapter={vi.fn()} onUpdateProgress={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Door çevirisini göster' });
+    fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
+    const player = screen.getByLabelText('Sesli okuma oynatıcısı');
+    expect(player.closest('[data-reader-chapter-card="true"]')).toBeTruthy();
+    expect(player.className).not.toContain('fixed');
+    fireEvent.click(screen.getByLabelText('Sesli okumayı kapat'));
+    expect(tts.stop).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText('Sesli okuma oynatıcısı')).toBeNull();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it('can reopen Read Along and start again from the persisted Reader token', async () => {
+    renderReader();
+    await screen.findByRole('button', { name: 'Door çevirisini göster' });
+    fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
+    fireEvent.click(screen.getByLabelText('Sesli okumayı kapat'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
+    fireEvent.click(screen.getAllByLabelText('Sesli okumayı başlat')[1]);
+    expect(tts.startFromToken).toHaveBeenCalledWith(0);
   });
 
   it('routes player sentence, rate, and return-to-follow actions without fabricating a time line', async () => {
