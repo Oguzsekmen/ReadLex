@@ -73,4 +73,17 @@ describe('Web Speech adapter contract', () => {
     adapter.stop();
     expect(speech.cancel).toHaveBeenCalledOnce();
   });
+  it('releases failed Read Along ownership without poisoning later browser speech', () => {
+    const { speech, MockUtterance } = installSpeech();
+    const adapter = new WebSpeechTtsAdapter();
+    const error = vi.fn();
+    adapter.speak({ text: 'Reader narration' }, { onError: error });
+    const readerUtterance = speech.speak.mock.calls[0][0];
+    readerUtterance.onerror?.({ error: 'synthesis-failed' });
+    adapter.stop();
+    speech.speak(new MockUtterance('word pronunciation'));
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ code: 'synthesis-failed' }));
+    expect(speech.cancel).not.toHaveBeenCalled();
+    expect(speech.speak).toHaveBeenCalledTimes(2);
+  });
 });

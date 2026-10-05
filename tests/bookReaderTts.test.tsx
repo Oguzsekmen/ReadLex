@@ -83,14 +83,16 @@ describe('BookReader TTS integration', () => {
 
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: undefined }); });
 
-  it('opens silently, keeps the player hidden, and starts from the current canonical position on user action', async () => {
+  it('opens the player without speech, then starts from the current canonical position only on player Play', async () => {
     renderReader();
     expect(await screen.findByRole('button', { name: 'Door çevirisini göster' })).toBeTruthy();
     expect(tts.startFromToken).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Sesli okuma oynatıcısı')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
-    expect(tts.startFromToken).toHaveBeenCalledWith(0);
     expect(screen.getByLabelText('Sesli okuma oynatıcısı')).toBeTruthy();
+    expect(tts.startFromToken).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sesli okumayı başlat' })[1]);
+    expect(tts.startFromToken).toHaveBeenCalledWith(0);
   });
 
   it('keeps manual selection separate from the exact active repeated token and stops narration before translation', async () => {
@@ -163,6 +165,8 @@ describe('BookReader TTS integration', () => {
       expect.objectContaining({ text: 'Legacy', start: 0, isWord: true }),
     ])));
     fireEvent.click(screen.getByRole('button', { name: 'Sesli okumayı başlat' }));
+    expect(tts.startFromToken).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sesli okumayı başlat' })[1]);
     expect(tts.startFromToken).toHaveBeenCalledWith(0);
   });
 });
