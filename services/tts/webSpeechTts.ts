@@ -14,8 +14,13 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
   private rate = 1;
   private utterance?: SpeechSynthesisUtterance;
   private ownsActiveUtterance = false;
+  private startWatchdog?: ReturnType<typeof setTimeout>;
   private api() {
     return typeof window === "undefined" ? undefined : window.speechSynthesis;
+  }
+  private clearStartWatchdog() {
+    if (this.startWatchdog !== undefined) clearTimeout(this.startWatchdog);
+    this.startWatchdog = undefined;
   }
   isSupported() {
     return Boolean(
@@ -64,6 +69,7 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
     }
     const shouldCancelOwnedSpeech = this.ownsActiveUtterance;
     const op = ++this.operation;
+    this.clearStartWatchdog();
     readAlongDebug("synth before", {
       paused: api.paused,
       speaking: api.speaking,
@@ -93,6 +99,7 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
     }
     utterance.onstart = () => {
       if (op === this.operation) {
+        this.clearStartWatchdog();
         readAlongDebug("adapter onstart", { operation: op });
         callbacks.onStart?.();
       }
@@ -107,18 +114,21 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
     };
     utterance.onpause = () => {
       if (op === this.operation) {
+        this.clearStartWatchdog();
         readAlongDebug("adapter onpause", { operation: op });
         callbacks.onPause?.();
       }
     };
     utterance.onresume = () => {
       if (op === this.operation) {
+        this.clearStartWatchdog();
         readAlongDebug("adapter onresume", { operation: op });
         callbacks.onResume?.();
       }
     };
     utterance.onend = () => {
       if (op === this.operation) {
+        this.clearStartWatchdog();
         this.utterance = undefined;
         this.ownsActiveUtterance = false;
         readAlongDebug("adapter onend", { operation: op });
@@ -127,6 +137,7 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
     };
     utterance.onerror = (event) => {
       if (op === this.operation) {
+        this.clearStartWatchdog();
         this.utterance = undefined;
         this.ownsActiveUtterance = false;
         const error: ReaderTtsError = {
@@ -134,6 +145,8 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
           message: event.error || "Speech synthesis failed.",
         };
         readAlongDebug("adapter onerror", { operation: op, code: error.code });
+        // Some browsers follow an error with a late end event; it must be stale.
+        this.operation += 1;
         callbacks.onError?.(error);
       }
     };
@@ -143,6 +156,15 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
       rate: utterance.rate,
     });
     api.speak(utterance);
+    this.startWatchdog = setTimeout(() => {
+      if (op !== this.operation || !this.ownsActiveUtterance) return;
+      this.utterance = undefined;
+      this.ownsActiveUtterance = false;
+      this.operation += 1;
+      readAlongDebug("start timeout", { operation: op });
+      api.cancel();
+      callbacks.onError?.({ code: "synthesis-failed", message: "Speech synthesis did not start." });
+    }, 4000);
     readAlongDebug("synth after", {
       paused: api.paused,
       speaking: api.speaking,
@@ -159,6 +181,7 @@ export class WebSpeechTtsAdapter implements ReaderTtsAdapter {
   stop() {
     const shouldCancelOwnedSpeech = this.ownsActiveUtterance;
     this.operation += 1;
+    this.clearStartWatchdog();
     this.utterance = undefined;
     this.ownsActiveUtterance = false;
     readAlongDebug("adapter stop", {

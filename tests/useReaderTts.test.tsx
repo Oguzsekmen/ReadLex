@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { useReaderTts } from '../hooks/useReaderTts';
 import { FakeReaderTtsAdapter } from '../services/tts/fakeReaderTts';
 import { PreparedReaderToken } from '../services/readerLanguageData';
+import { buildSpeechChunksFromToken } from '../services/tts/tokenSync';
 
 const text = 'door opened the door. Next sentence.';
 const tokens: PreparedReaderToken[] = [
@@ -38,5 +39,25 @@ describe('useReaderTts', () => {
     act(() => adapter.boundary(7));
     expect(state!.activeTokenIndex).toBe(2);
     expect(state!.activeSentenceId).toBe('legacy-sentence-0');
+  });
+  it('speaks one bounded chunk at a time and maps later chunk boundaries to global tokens', () => {
+    const longText = Array.from({ length: 500 }, () => 'door').join(' ');
+    const longTokens: PreparedReaderToken[] = [...longText.matchAll(/door/g)].map((match, index) => ({ index, text: 'door', normalized: 'door', start: match.index!, end: match.index! + 4, sentenceId: `s${Math.floor(index / 8)}`, isWord: true }));
+    const adapter = new FakeReaderTtsAdapter(); const speak = vi.spyOn(adapter, 'speak'); let state: Exposed | undefined;
+    const Harness = () => { const value = useReaderTts(longText, longTokens, adapter); useEffect(() => { state = value; }); return null; };
+    render(<Harness />);
+    act(() => state!.start());
+    const firstCallbacks = adapter.callbacks;
+    expect(speak).toHaveBeenCalledOnce();
+    expect(adapter.request!.text.length).toBeLessThanOrEqual(1000);
+    act(() => adapter.end());
+    expect(speak).toHaveBeenCalledTimes(2);
+    expect(adapter.request!.text.length).toBeLessThanOrEqual(1000);
+    const secondStart = buildSpeechChunksFromToken(longText, longTokens, 0)[1].globalStartChar;
+    act(() => adapter.boundary(0));
+    expect(state!.activeTokenIndex).toBe(longTokens.find(token => token.start === secondStart)?.index);
+    act(() => state!.stop());
+    act(() => firstCallbacks?.onEnd?.());
+    expect(speak).toHaveBeenCalledTimes(2);
   });
 });

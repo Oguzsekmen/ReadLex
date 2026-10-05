@@ -4,11 +4,11 @@ import {
   PreparedReaderToken,
 } from "../services/readerLanguageData";
 import {
-  buildSpeechSegmentFromToken,
+  buildSpeechChunksFromToken,
   findNextSentenceStartToken,
   findPreviousSentenceStartToken,
   findSentenceStartToken,
-  resolveSegmentCharIndex,
+  resolveTokenFromCharIndex,
 } from "../services/tts/tokenSync";
 import {
   ReaderTtsAdapter,
@@ -33,6 +33,7 @@ export const useReaderTts = (
     [text, tokens.length ? tokens : text],
   );
   const session = useRef(0);
+  const resumeToken = useRef<number>();
   const source = useRef<
     { adapter: ReaderTtsAdapter; text: string } | undefined
   >(undefined);
@@ -62,13 +63,16 @@ export const useReaderTts = (
     session.current += 1;
     if (previous.adapter === adapter) adapter.stop();
     setStatus("IDLE");
+    resumeToken.current = undefined;
     setActiveTokenIndex(undefined);
     setActiveSentenceId(undefined);
   }, [adapter, text]);
   const startFromToken = useCallback(
     (
-      requestedIndex = activeTokenIndex ??
-        narrationTokens.find((t) => t.isWord)?.index,
+      requestedIndex =
+        activeTokenIndex ??
+        resumeToken.current ??
+        narrationTokens.find((token) => token.isWord)?.index,
     ) => {
       const firstWordIndex = narrationTokens.find(
         (token) => token.isWord,
@@ -84,70 +88,112 @@ export const useReaderTts = (
         )
           ? requestedIndex
           : firstWordIndex;
-      const segment = buildSpeechSegmentFromToken(text, narrationTokens, index);
-      if (!segment?.speechText.trim()) {
-        readAlongDebug("play ignored: empty segment", { tokenIndex: index });
+      resumeToken.current = index;
+
+      let chunks: ReturnType<typeof buildSpeechChunksFromToken>;
+      try {
+        chunks = buildSpeechChunksFromToken(text, narrationTokens, index);
+      } catch (error) {
+        readAlongDebug("chunk preparation error", {
+          message: error instanceof Error ? error.message : "unknown",
+        });
+        setStatus("ERROR");
         return;
       }
+      if (!chunks.length) {
+        readAlongDebug("play ignored: no speech chunks", { tokenIndex: index });
+        return;
+      }
+
       const id = ++session.current;
-      readAlongDebug("play", {
+      readAlongDebug("session start", {
         adapter: adapter.constructor.name,
         tokenCount: narrationTokens.length,
         startToken: index,
-        textLength: segment.speechText.length,
+        chunkCount: chunks.length,
         synchronizationSupported: capabilities.boundaryEventsSupported,
       });
-      adapter.speak(
-        {
-          text: segment.speechText,
-          rate,
-          language: "en-US",
-          preferredVoiceId: voice?.id,
-        },
-        {
-          onStart: () => {
-            readAlongDebug("onstart", { session: id });
-            if (id === session.current) setStatus("SPEAKING");
+      const playChunk = (chunkIndex: number) => {
+        if (id !== session.current) return;
+        const chunk = chunks[chunkIndex];
+        if (!chunk) {
+          setStatus("IDLE");
+          return;
+        }
+        readAlongDebug("chunk prepared", {
+          chunkIndex,
+          textLength: chunk.text.length,
+          globalStartChar: chunk.globalStartChar,
+          globalEndChar: chunk.globalEndChar,
+          firstToken: chunk.firstTokenIndex,
+          lastToken: chunk.lastTokenIndex,
+        });
+        adapter.speak(
+          {
+            text: chunk.text,
+            rate,
+            language: "en-US",
+            preferredVoiceId: voice?.id,
           },
-          onBoundary: (event) => {
-            if (id !== session.current || !capabilities.boundaryEventsSupported)
-              return;
-            const token = resolveSegmentCharIndex(
-              segment,
-              narrationTokens,
-              event.charIndex,
-            );
-            if (token) {
-              readAlongDebug("onboundary", {
+          {
+            onStart: () => {
+              if (id !== session.current) return;
+              readAlongDebug("chunk onstart", { chunkIndex });
+              setStatus("SPEAKING");
+            },
+            onBoundary: (event) => {
+              if (
+                id !== session.current ||
+                !capabilities.boundaryEventsSupported
+              )
+                return;
+              const token = resolveTokenFromCharIndex(
+                narrationTokens,
+                chunk.globalStartChar + event.charIndex,
+              );
+              if (!token) return;
+              readAlongDebug("boundary", {
+                chunkIndex,
                 tokenIndex: token.index,
                 sentenceId: token.sentenceId,
               });
+              resumeToken.current = token.index;
               setActiveTokenIndex((previous) =>
                 previous === token.index ? previous : token.index,
               );
               setActiveSentenceId((previous) =>
                 previous === token.sentenceId ? previous : token.sentenceId,
               );
-            }
+            },
+            onPause: () => {
+              if (id !== session.current) return;
+              readAlongDebug("chunk onpause", { chunkIndex });
+              setStatus("PAUSED");
+            },
+            onResume: () => {
+              if (id !== session.current) return;
+              readAlongDebug("chunk onresume", { chunkIndex });
+              setStatus("SPEAKING");
+            },
+            onEnd: () => {
+              if (id !== session.current) return;
+              readAlongDebug("chunk end", { chunkIndex });
+              if (chunkIndex + 1 < chunks.length) {
+                readAlongDebug("next chunk", { chunkIndex: chunkIndex + 1 });
+                playChunk(chunkIndex + 1);
+              } else {
+                setStatus("IDLE");
+              }
+            },
+            onError: (error) => {
+              if (id !== session.current) return;
+              readAlongDebug("error", { chunkIndex, code: error.code });
+              setStatus("ERROR");
+            },
           },
-          onPause: () => {
-            readAlongDebug("onpause", { session: id });
-            if (id === session.current) setStatus("PAUSED");
-          },
-          onResume: () => {
-            readAlongDebug("onresume", { session: id });
-            if (id === session.current) setStatus("SPEAKING");
-          },
-          onEnd: () => {
-            readAlongDebug("onend", { session: id });
-            if (id === session.current) setStatus("IDLE");
-          },
-          onError: (error) => {
-            readAlongDebug("onerror", { session: id, code: error.code });
-            if (id === session.current) setStatus("ERROR");
-          },
-        },
-      );
+        );
+      };
+      playChunk(0);
     },
     [
       activeTokenIndex,
@@ -180,8 +226,9 @@ export const useReaderTts = (
       const next = normalizeRate(value);
       setRateState(next);
       if (status === "SPEAKING") {
+        const token = activeTokenIndex ?? resumeToken.current;
         stop();
-        setTimeout(() => startFromToken(), 0);
+        setTimeout(() => startFromToken(token), 0);
       }
     },
     [startFromToken, status, stop],

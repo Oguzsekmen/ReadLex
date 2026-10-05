@@ -18,6 +18,7 @@ const installSpeech = (voices: any[] = [], boundary = true) => {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: undefined });
 });
@@ -97,5 +98,21 @@ describe('Web Speech adapter contract', () => {
     utterance.onend?.();
     expect(speech.cancel).toHaveBeenCalledOnce();
     expect(end).not.toHaveBeenCalled();
+  });
+
+  it('cancels only its owned utterance and releases state when a chunk never starts', () => {
+    vi.useFakeTimers();
+    const { speech, MockUtterance } = installSpeech();
+    const adapter = new WebSpeechTtsAdapter();
+    const error = vi.fn();
+    adapter.speak({ text: 'bounded chunk' }, { onError: error });
+    vi.advanceTimersByTime(4000);
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ code: 'synthesis-failed' }));
+    expect(speech.cancel).toHaveBeenCalledOnce();
+    adapter.stop();
+    expect(speech.cancel).toHaveBeenCalledOnce();
+    speech.speak(new MockUtterance('word pronunciation'));
+    expect(speech.speak).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });
